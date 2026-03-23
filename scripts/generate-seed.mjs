@@ -4,10 +4,10 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const base = {
-  version: 1,
+  version: 2,
   catalogs: {
     owners: ["Juan Luis", "Guillermo", "Diego", "Luis", "Alejandro"],
-    statuses: ["Backlog", "En progreso", "En revisión", "Bloqueada", "Completada"],
+    statuses: ["BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "BLOCKED", "COMPLETED"],
     priorities: ["Alta", "Media", "Baja"],
     levels: ["EPIC", "TOPIC", "TASK", "SUBTASK"],
     epics: [
@@ -35,6 +35,7 @@ function item(o) {
     blocked: false,
     dependencies: "",
     notes: "",
+    rlse: "",
     ...o,
   };
 }
@@ -393,7 +394,19 @@ items.push(
   )
 );
 
-const out = { ...base, items };
+const out = {
+  ...base,
+  items,
+  testPlans: [],
+  ui: {
+    viewMode: "tree",
+    treeExpandedIds: [],
+    columnVisibility: {},
+    sortKey: null,
+    sortDir: "asc",
+  },
+  meta: {},
+};
 const dest = path.join(__dirname, "..", "data", "project-db.json");
 fs.writeFileSync(dest, JSON.stringify(out, null, 2), "utf8");
 console.log("Wrote", dest, "items:", items.length);

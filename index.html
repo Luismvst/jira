@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kanban proyecto — local</title>
+    <title>Last Mile Kanban</title>
     <link rel="stylesheet" href="css/styles.css" />
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <header class="app-header">
-      <h1 class="app-title">Seguimiento proyecto</h1>
+      <h1 class="app-title">Last Mile Kanban</h1>
       <div class="toolbar">
         <button type="button" id="btn-open" class="btn btn-primary">Abrir base de datos</button>
         <button type="button" id="btn-save" class="btn" disabled>Guardar</button>
@@ -17,7 +17,7 @@
           <button type="button" id="btn-export" class="btn" disabled>Exportar ▾</button>
           <div id="export-menu" class="dropdown-menu hidden">
             <button type="button" data-export="json">JSON</button>
-            <button type="button" data-export="csv">CSV</button>
+            <button type="button" data-export="csv">CSV (opcional)</button>
             <button type="button" data-export="xlsx">XLSX (snapshot)</button>
           </div>
         </div>
@@ -32,24 +32,33 @@
             /></label>
           </div>
         </div>
-        <button type="button" id="btn-load-seed" class="btn btn-ghost">Cargar ejemplo (seed)</button>
-        <span id="file-status" class="file-status">Sin archivo</span>
+        <button type="button" id="btn-load-seed" class="btn btn-ghost">Cargar datos iniciales</button>
+        <div id="file-status" class="file-status file-status-block">
+          <span id="file-label">Sin archivo</span>
+          <span id="file-dirty" class="hidden dirty-badge">Cambios sin guardar</span>
+          <span id="file-saved" class="saved-hint"></span>
+        </div>
       </div>
     </header>
 
     <nav class="tabs">
-      <button type="button" class="tab active" data-tab="backlog">Backlog</button>
+      <button type="button" class="tab active" data-tab="panel">Panel</button>
+      <button type="button" class="tab" data-tab="backlog">Backlog</button>
       <button type="button" class="tab" data-tab="tracking">Seguimiento</button>
       <button type="button" class="tab" data-tab="done">Completadas</button>
-      <button type="button" class="tab" data-tab="panel">Panel</button>
-      <button type="button" class="tab" data-tab="creator">Creador / import masivo</button>
-      <button type="button" class="tab" data-tab="help">Ayuda / Procesos</button>
+      <button type="button" class="tab" data-tab="testplans">Plan de pruebas</button>
+      <button type="button" class="tab" data-tab="import">Importar / Exportar</button>
+      <button type="button" class="tab" data-tab="help">Ayuda</button>
     </nav>
 
     <main class="main">
-      <section id="view-backlog" class="view">
+      <section id="view-panel" class="view">
+        <div id="panel-kpis" class="panel-grid panel-grid-wide"></div>
+      </section>
+
+      <section id="view-backlog" class="view hidden">
         <div class="view-toolbar">
-          <input type="search" id="filter-text" placeholder="Filtrar…" class="input-search" />
+          <input type="search" id="filter-text" placeholder="Buscar en fila…" class="input-search" />
           <select id="filter-owner" class="select"></select>
           <select id="filter-epic" class="select"></select>
           <button type="button" id="btn-refresh" class="btn btn-ghost">Refrescar vistas</button>
@@ -71,6 +80,8 @@
                 <th>Seg.</th>
                 <th>Def.OK</th>
                 <th>Release</th>
+                <th>RLSE</th>
+                <th>Objetivo</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -81,7 +92,16 @@
 
       <section id="view-tracking" class="view hidden">
         <div class="view-toolbar">
-          <input type="search" id="filter-text-t" placeholder="Filtrar…" class="input-search" />
+          <input type="search" id="filter-text-t" placeholder="Buscar en fila…" class="input-search" />
+          <select id="filter-owner-t" class="select" aria-label="Responsable"></select>
+          <select id="filter-epic-t" class="select" aria-label="Épica"></select>
+          <select id="filter-status-t" class="select" aria-label="Estado"></select>
+          <input type="search" id="filter-rlse-t" placeholder="RLSE…" class="input-search" style="min-width:120px" />
+          <select id="filter-blocked-t" class="select" aria-label="Bloqueo">
+            <option value="">Bloqueo: todos</option>
+            <option value="1">Bloqueadas</option>
+            <option value="0">No bloqueadas</option>
+          </select>
         </div>
         <div class="table-wrap">
           <table class="data-table" id="table-tracking">
@@ -94,6 +114,7 @@
                 <th>Resp.</th>
                 <th>Prior.</th>
                 <th>Estado</th>
+                <th>Objetivo</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -104,7 +125,9 @@
 
       <section id="view-done" class="view hidden">
         <div class="view-toolbar">
-          <input type="search" id="filter-text-d" placeholder="Filtrar…" class="input-search" />
+          <input type="search" id="filter-text-d" placeholder="Buscar en fila…" class="input-search" />
+          <select id="filter-owner-d" class="select" aria-label="Responsable"></select>
+          <select id="filter-epic-d" class="select" aria-label="Épica"></select>
         </div>
         <div class="table-wrap">
           <table class="data-table" id="table-done">
@@ -116,6 +139,8 @@
                 <th>Épica</th>
                 <th>Resp.</th>
                 <th>Completada</th>
+                <th>RLSE</th>
+                <th>Plan pruebas</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -124,27 +149,54 @@
         </div>
       </section>
 
-      <section id="view-panel" class="view hidden">
-        <div id="panel-kpis" class="panel-grid"></div>
+      <section id="view-testplans" class="view hidden">
+        <div class="view-toolbar">
+          <input type="search" id="filter-text-tp" placeholder="Filtrar plan / RLSE…" class="input-search" />
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID plan</th>
+                <th>Task</th>
+                <th>Título</th>
+                <th>RLSE</th>
+                <th>Estado</th>
+                <th>Entorno</th>
+                <th>Certificación</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-testplans"></tbody>
+          </table>
+        </div>
       </section>
 
-      <section id="view-creator" class="view hidden">
+      <section id="view-import" class="view hidden">
         <div class="creator-grid">
           <div class="card">
-            <h2>Alta masiva CSV</h2>
-            <p class="hint">
-              Cabecera opcional. Columnas:
-              <code>level,parentId,epic,topic,task,subtask,title,summary,owner,priority,targetDate,definitionOk,releaseTarget,notes</code>
-            </p>
-            <textarea id="bulk-csv" rows="12" class="textarea" placeholder="Pega CSV aquí…"></textarea>
-            <button type="button" id="btn-bulk-csv" class="btn btn-primary">Importar líneas</button>
-            <pre id="bulk-report" class="bulk-report"></pre>
+            <h2>JSON — principal</h2>
+            <p class="hint">Descarga el JSON actual, la plantilla o copia un ejemplo. Importación completa o fusión por ID.</p>
+            <div class="btn-row">
+              <button type="button" id="btn-dl-json" class="btn btn-primary">Descargar JSON actual</button>
+              <button type="button" id="btn-dl-template" class="btn">Descargar plantilla</button>
+              <button type="button" id="btn-copy-template" class="btn">Copiar plantilla al portapapeles</button>
+            </div>
+            <h3>Importar JSON</h3>
+            <p class="hint">Usa el menú <strong>Importar → JSON</strong> o pega aquí y elige modo.</p>
+            <textarea id="paste-json" rows="6" class="textarea" placeholder='{"version":2,...}'></textarea>
+            <div class="btn-row">
+              <button type="button" id="btn-import-replace" class="btn btn-primary">Reemplazar base</button>
+              <button type="button" id="btn-import-merge" class="btn">Fusionar por ID</button>
+            </div>
+            <pre id="import-report" class="bulk-report"></pre>
           </div>
           <div class="card">
-            <h2>Pegar JSON completo</h2>
-            <p class="hint">Reemplaza la base en memoria (usa con cuidado).</p>
-            <textarea id="bulk-json" rows="8" class="textarea" placeholder='{"version":1,"catalogs":{},"items":[]}'></textarea>
-            <button type="button" id="btn-bulk-json" class="btn">Fusionar / reemplazar</button>
+            <h2>CSV (opcional)</h2>
+            <p class="hint">Columnas: level, parentId, epic, …, status, rlse</p>
+            <textarea id="bulk-csv" rows="10" class="textarea" placeholder="Pega CSV…"></textarea>
+            <button type="button" id="btn-bulk-csv" class="btn">Importar CSV</button>
+            <pre id="bulk-report" class="bulk-report"></pre>
           </div>
         </div>
       </section>
@@ -155,14 +207,14 @@
     </main>
 
     <div id="modal-overlay" class="modal-overlay hidden">
-      <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true">
         <header class="modal-header">
           <h2 id="modal-title">Detalle</h2>
           <button type="button" id="modal-close" class="btn-icon" aria-label="Cerrar">×</button>
         </header>
         <div id="modal-body" class="modal-body"></div>
         <footer class="modal-footer">
-          <button type="button" id="modal-save" class="btn btn-primary">Guardar cambios</button>
+          <button type="button" id="modal-save" class="btn btn-primary">Guardar</button>
         </footer>
       </div>
     </div>

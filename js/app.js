@@ -29,23 +29,38 @@ function setToolbarEnabled(on) {
 function refreshToolbar() {
   const has = dataService.getDb() != null;
   setToolbarEnabled(has);
-  const status = document.getElementById("file-status");
-  if (status) {
-    status.textContent = has
-      ? dataService.hasFileHandle()
-        ? "Archivo vinculado (guardar sobrescribe)"
-        : "Datos en memoria (guardar descarga o elige destino)"
-      : "Sin archivo — Abre o carga el ejemplo";
+  const labelEl = document.getElementById("file-label");
+  const dirtyEl = document.getElementById("file-dirty");
+  const savedEl = document.getElementById("file-saved");
+  const db = dataService.getDb();
+
+  if (labelEl) {
+    if (!has) {
+      labelEl.textContent = "Sin archivo — Abre o carga datos iniciales";
+    } else {
+      const name = db?.meta?.lastOpenedFileLabel || "project-db.json (memoria)";
+      labelEl.textContent = `Archivo: ${name}`;
+    }
+  }
+  if (dirtyEl) {
+    dirtyEl.classList.toggle("hidden", !dataService.isDirty());
+  }
+  if (savedEl && db?.meta?.lastSavedAt) {
+    const d = new Date(db.meta.lastSavedAt);
+    savedEl.textContent = `Último guardado: ${d.toLocaleString()}`;
+  } else if (savedEl) {
+    savedEl.textContent = "";
   }
 }
 
-function onPersist() {
-  /* no-op; persist is explicit save */
+function onDataChange() {
+  dataService.markDirty();
+  refreshToolbar();
 }
 
 const ui = mount({
   getDb: () => dataService.getDb(),
-  onPersist,
+  onDataChange,
   toast,
   refreshToolbar,
 });
@@ -65,8 +80,13 @@ const importCsv = document.getElementById("import-csv");
 const bulkCsv = document.getElementById("bulk-csv");
 const bulkReport = document.getElementById("bulk-report");
 const btnBulkCsv = document.getElementById("btn-bulk-csv");
-const bulkJson = document.getElementById("bulk-json");
-const btnBulkJson = document.getElementById("btn-bulk-json");
+const pasteJson = /** @type {HTMLTextAreaElement|null} */ (document.getElementById("paste-json"));
+const btnImportReplace = document.getElementById("btn-import-replace");
+const btnImportMerge = document.getElementById("btn-import-merge");
+const importReport = document.getElementById("import-report");
+const btnDlJson = document.getElementById("btn-dl-json");
+const btnDlTemplate = document.getElementById("btn-dl-template");
+const btnCopyTemplate = document.getElementById("btn-copy-template");
 
 btnOpen?.addEventListener("click", async () => {
   try {
@@ -84,8 +104,22 @@ btnSave?.addEventListener("click", async () => {
   try {
     await dataService.saveDatabaseFile();
     toast("Guardado correctamente.");
+    refreshToolbar();
+    ui.renderAll();
   } catch (e) {
     toast(String(e));
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault();
+    if (dataService.getDb()) {
+      dataService.saveDatabaseFile().then(() => {
+        toast("Guardado.");
+        refreshToolbar();
+      });
+    }
   }
 });
 
@@ -121,7 +155,7 @@ exportMenu?.querySelectorAll("[data-export]").forEach((btn) => {
         });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = "project-db.json";
+        a.download = db.meta?.lastOpenedFileLabel || "project-db.json";
         a.click();
         URL.revokeObjectURL(a.href);
         toast("JSON exportado.");
@@ -151,7 +185,12 @@ importJson?.addEventListener("change", async () => {
     const text = await f.text();
     const data = exportImport.parseProjectJson(text);
     dataService.loadFromObject(data);
-    toast("JSON importado (memoria).");
+    const db = dataService.getDb();
+    if (db) {
+      db.meta = db.meta || {};
+      db.meta.lastOpenedFileLabel = f.name;
+    }
+    toast("JSON importado.");
     ui.renderAll();
   } catch (e) {
     toast(String(e));
@@ -172,6 +211,7 @@ importCsv?.addEventListener("change", async () => {
         ? `Insertadas: ${res.inserted}\nErrores:\n${res.errors.map((e) => `Línea ${e.line}: ${e.message}`).join("\n")}`
         : `Insertadas: ${res.inserted}`;
     toast(`CSV: ${res.inserted} filas, ${res.errors.length} errores`);
+    onDataChange();
     ui.renderAll();
   } catch (e) {
     toast(String(e));
@@ -184,10 +224,11 @@ btnLoadSeed?.addEventListener("click", async () => {
   if (seed) {
     dataService.setDb(seed);
     dataService.clearFileHandle();
-    toast("Cargado ejemplo desde data/project-db.json.");
+    dataService.clearDirty();
+    toast("Datos iniciales cargados.");
     ui.renderAll();
   } else {
-    toast("No se pudo cargar el seed (usa un servidor local o Abrir archivo).");
+    toast("No se pudo cargar (usa servidor local o Abrir archivo).");
   }
 });
 
@@ -201,6 +242,7 @@ btnCleanup?.addEventListener("click", () => {
   if (!db) return;
   const n = cleanupOldTracking(db.items);
   toast(`Limpieza: ${n} ítem(s) actualizados.`);
+  onDataChange();
   ui.renderAll();
 });
 
@@ -219,22 +261,75 @@ btnBulkCsv?.addEventListener("click", () => {
       ? `Insertadas: ${res.inserted}\nErrores:\n${res.errors.map((e) => `Línea ${e.line}: ${e.message}`).join("\n")}`
       : `Insertadas: ${res.inserted}`;
   toast(`CSV masivo: ${res.inserted} filas.`);
+  onDataChange();
   ui.renderAll();
 });
 
-btnBulkJson?.addEventListener("click", () => {
+btnDlJson?.addEventListener("click", () => {
   const db = dataService.getDb();
-  const text = bulkJson?.value?.trim();
+  if (!db) return;
+  const blob = new Blob([exportImport.exportJsonString(db)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = db.meta?.lastOpenedFileLabel || "project-db.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("Descarga iniciada.");
+});
+
+btnDlTemplate?.addEventListener("click", () => {
+  const blob = new Blob([exportImport.exportTemplateJson()], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "last-mile-kanban-template.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("Plantilla descargada.");
+});
+
+btnCopyTemplate?.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(exportImport.exportTemplateJson());
+    toast("Plantilla copiada al portapapeles.");
+  } catch {
+    toast("No se pudo copiar.");
+  }
+});
+
+btnImportReplace?.addEventListener("click", () => {
+  const db = dataService.getDb();
+  const text = pasteJson?.value?.trim();
   if (!db || !text) {
     toast("Pega JSON válido.");
     return;
   }
   try {
-    const parsed = exportImport.parseProjectJson(text);
-    if (!window.confirm("¿Reemplazar toda la base en memoria con este JSON?")) return;
-    dataService.loadFromObject(parsed);
-    toast("Base reemplazada en memoria.");
+    const incoming = exportImport.parseProjectJson(text);
+    if (!window.confirm("¿Reemplazar toda la base en memoria?")) return;
+    exportImport.replaceProjectData(db, incoming);
+    onDataChange();
+    if (importReport) importReport.textContent = "Base reemplazada.";
     ui.renderAll();
+    toast("Reemplazado.");
+  } catch (e) {
+    toast(String(e));
+  }
+});
+
+btnImportMerge?.addEventListener("click", () => {
+  const db = dataService.getDb();
+  const text = pasteJson?.value?.trim();
+  if (!db || !text) {
+    toast("Pega JSON con ítems.");
+    return;
+  }
+  try {
+    const incoming = exportImport.parseProjectJson(text);
+    const r = exportImport.mergeItemsById(db, incoming);
+    if (importReport) importReport.textContent = `Fusionados: ${r.merged}, nuevos: ${r.added}`;
+    onDataChange();
+    ui.renderAll();
+    toast("Fusión aplicada.");
   } catch (e) {
     toast(String(e));
   }
@@ -255,7 +350,8 @@ async function init() {
   const seed = await dataService.tryLoadBundledSeed();
   if (seed) {
     dataService.setDb(seed);
-    toast("Datos iniciales cargados (seed).");
+    dataService.clearDirty();
+    toast("Datos iniciales cargados.");
   }
   ui.renderAll();
 }

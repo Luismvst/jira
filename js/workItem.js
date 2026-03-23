@@ -1,9 +1,11 @@
 import {
   DEFAULT_STATUS,
   LEVEL_PREFIX,
+  STATUS,
   STATUS_COMPLETED,
   TRACKING_CLEANUP_DAYS,
 } from "./constants.js";
+import { migrateItemStatus } from "./migrate.js";
 
 /**
  * @typedef {Object} WorkItem
@@ -23,6 +25,7 @@ import {
  * @property {boolean} [inTracking]
  * @property {boolean} [definitionOk]
  * @property {string} [releaseTarget]
+ * @property {string} [rlse]
  * @property {string} [preVersion]
  * @property {string} [proVersion]
  * @property {string} [createdAt]
@@ -32,6 +35,7 @@ import {
  * @property {boolean} [blocked]
  * @property {string} [dependencies]
  * @property {string} [notes]
+ * @property {string} [testPlanId]
  */
 
 /**
@@ -54,6 +58,23 @@ export function generateId(items, level) {
 
 /**
  * @param {WorkItem} item
+ * @returns {boolean}
+ */
+export function isCompleted(item) {
+  const s = String(item.status || "").trim();
+  return s === STATUS_COMPLETED || s === "Completada";
+}
+
+/**
+ * @param {WorkItem} item
+ * @returns {boolean}
+ */
+export function isBlockedState(item) {
+  return Boolean(item.blocked) || String(item.status || "").trim() === STATUS.BLOCKED;
+}
+
+/**
+ * @param {WorkItem} item
  * @returns {{ ok: boolean, missing: string[] }}
  */
 export function validateForTracking(item) {
@@ -66,6 +87,8 @@ export function validateForTracking(item) {
   if (!String(item.priority || "").trim()) missing.push("Prioridad");
   if (!String(item.status || "").trim()) missing.push("Estado");
   if (!item.definitionOk) missing.push("Definición OK");
+  if (isBlockedState(item)) missing.push("Desbloquear antes de seguimiento");
+  if (isCompleted(item)) missing.push("Ya completada");
   return { ok: missing.length === 0, missing };
 }
 
@@ -110,14 +133,6 @@ export function collectDescendantsForTracking(items, rootId, includeRoot) {
 }
 
 /**
- * @param {WorkItem} item
- * @returns {boolean}
- */
-export function isCompleted(item) {
-  return String(item.status || "").trim() === STATUS_COMPLETED;
-}
-
-/**
  * @param {WorkItem[]} items
  * @param {string} itemId
  * @param {boolean} includeDescendants
@@ -141,9 +156,46 @@ export function sendToTracking(items, itemId, includeDescendants) {
       continue;
     }
     it.inTracking = true;
+    if (it.status === STATUS.BACKLOG || it.status === STATUS.READY) {
+      it.status = STATUS.IN_PROGRESS;
+    }
     updated++;
   }
   return { updated, errors };
+}
+
+/**
+ * @param {WorkItem[]} items
+ * @param {string} itemId
+ * @returns {boolean}
+ */
+export function removeFromTracking(items, itemId) {
+  const it = items.find((i) => i.id === itemId);
+  if (!it) return false;
+  it.inTracking = false;
+  if (it.status === STATUS.IN_PROGRESS || it.status === STATUS.IN_REVIEW) {
+    it.status = STATUS.BACKLOG;
+  }
+  return true;
+}
+
+/**
+ * @param {WorkItem[]} items
+ * @param {string} itemId
+ * @returns {boolean}
+ */
+export function toggleBlocked(items, itemId) {
+  const it = items.find((i) => i.id === itemId);
+  if (!it || isCompleted(it)) return false;
+  if (isBlockedState(it)) {
+    it.blocked = false;
+    if (it.status === STATUS.BLOCKED) it.status = STATUS.BACKLOG;
+  } else {
+    it.blocked = true;
+    it.status = STATUS.BLOCKED;
+    it.inTracking = false;
+  }
+  return true;
 }
 
 /**
@@ -157,14 +209,28 @@ export function completeItem(items, itemId) {
   it.status = STATUS_COMPLETED;
   it.completedAt = new Date().toISOString().slice(0, 10);
   it.inTracking = false;
+  it.blocked = false;
   return true;
 }
 
 /**
- * Quita seguimiento en completadas antiguas (> N días).
+ * @param {WorkItem[]} items
+ * @param {string} itemId
+ * @returns {boolean}
+ */
+export function reopenItem(items, itemId) {
+  const it = items.find((i) => i.id === itemId);
+  if (!it || !isCompleted(it)) return false;
+  it.status = STATUS.BACKLOG;
+  it.completedAt = "";
+  it.inTracking = false;
+  return true;
+}
+
+/**
  * @param {WorkItem[]} items
  * @param {number} [days]
- * @returns {number} número de ítems ajustados
+ * @returns {number}
  */
 export function cleanupOldTracking(items, days = TRACKING_CLEANUP_DAYS) {
   const now = new Date();
@@ -174,7 +240,7 @@ export function cleanupOldTracking(items, days = TRACKING_CLEANUP_DAYS) {
     if (!it.completedAt) continue;
     const d = new Date(it.completedAt);
     if (Number.isNaN(d.getTime())) continue;
-    const diff = (now - d) / (86400000);
+    const diff = (now - d) / 86400000;
     if (diff > days) {
       it.inTracking = false;
       n++;
@@ -184,7 +250,6 @@ export function cleanupOldTracking(items, days = TRACKING_CLEANUP_DAYS) {
 }
 
 /**
- * Vista backlog: no completados (opcional: todos)
  * @param {WorkItem[]} items
  * @returns {WorkItem[]}
  */
@@ -219,6 +284,7 @@ export function createWorkItemFromForm(raw, existing) {
   const now = new Date().toISOString();
   let pid = raw.parentId;
   if (pid === "" || pid === undefined || pid === "null") pid = null;
+  let st = migrateItemStatus(String(raw.status || DEFAULT_STATUS).trim() || DEFAULT_STATUS);
   return {
     id,
     parentId: pid,
@@ -232,20 +298,41 @@ export function createWorkItemFromForm(raw, existing) {
     subtask: String(raw.subtask || "").trim(),
     owner: String(raw.owner || "").trim(),
     priority: String(raw.priority || "").trim(),
-    status: String(raw.status || DEFAULT_STATUS).trim() || DEFAULT_STATUS,
+    status: st,
     inTracking: false,
     definitionOk: Boolean(raw.definitionOk),
     releaseTarget: String(raw.releaseTarget || "").trim(),
+    rlse: String(raw.rlse || "").trim(),
     preVersion: String(raw.preVersion || "").trim(),
     proVersion: String(raw.proVersion || "").trim(),
     createdAt: now,
     targetDate: String(raw.targetDate || "").trim(),
     startDate: String(raw.startDate || "").trim(),
     completedAt: "",
-    blocked: Boolean(raw.blocked),
+    blocked: Boolean(raw.blocked) || st === STATUS.BLOCKED,
     dependencies: String(raw.dependencies || "").trim(),
     notes: String(raw.notes || "").trim(),
   };
 }
 
-export { STATUS_COMPLETED, DEFAULT_STATUS, TRACKING_CLEANUP_DAYS };
+/**
+ * Valida coherencia básica EPIC→TOPIC→TASK→SUBTASK.
+ * @param {WorkItem} it
+ * @param {WorkItem[]} all
+ * @returns {{ ok: boolean, message?: string }}
+ */
+export function validateHierarchy(it, all) {
+  if (!it.parentId) {
+    if (it.level !== "EPIC") return { ok: false, message: "Solo EPIC sin padre" };
+    return { ok: true };
+  }
+  const p = all.find((x) => x.id === it.parentId);
+  if (!p) return { ok: false, message: "Parent no encontrado" };
+  const order = ["EPIC", "TOPIC", "TASK", "SUBTASK"];
+  const pi = order.indexOf(p.level);
+  const ci = order.indexOf(it.level);
+  if (ci !== pi + 1) return { ok: false, message: `Nivel ${it.level} debe colgarse de ${order[ci - 1] || "?"}` };
+  return { ok: true };
+}
+
+export { STATUS_COMPLETED, DEFAULT_STATUS, TRACKING_CLEANUP_DAYS, STATUS };

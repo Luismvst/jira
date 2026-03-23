@@ -1,6 +1,29 @@
 /**
  * @typedef {import('./workItem.js').WorkItem} WorkItem
  * @typedef {{
+ *   id: string,
+ *   taskId: string,
+ *   title: string,
+ *   rlse: string,
+ *   status: string,
+ *   environment: string,
+ *   steps: string,
+ *   expectedResult: string,
+ *   actualResult: string,
+ *   evidenceNotes: string,
+ *   tester: string,
+ *   executedAt: string,
+ *   certificationStatus: string,
+ *   notes: string,
+ * }} TestPlan
+ * @typedef {{
+ *   columnVisibility?: Record<string, boolean>,
+ *   sortKey?: string|null,
+ *   sortDir?: 'asc'|'desc',
+ *   viewMode?: 'tree'|'flat',
+ *   treeExpandedIds?: string[],
+ * }} UiConfig
+ * @typedef {{
  *   version: number,
  *   catalogs: {
  *     owners: string[],
@@ -10,14 +33,23 @@
  *     epics: string[],
  *   },
  *   items: WorkItem[],
+ *   ui?: UiConfig,
+ *   testPlans?: TestPlan[],
+ *   meta?: { lastOpenedFileLabel?: string, lastSavedAt?: string },
  * }} ProjectDb
  */
+
+import { migrateProjectDb } from "./migrate.js";
+import { STATUS_ORDER } from "./constants.js";
 
 /** @type {ProjectDb|null} */
 let db = null;
 
 /** @type {FileSystemFileHandle|null} */
 let fileHandle = null;
+
+/** @type {boolean} */
+let dirty = false;
 
 /** @returns {ProjectDb|null} */
 export function getDb() {
@@ -31,6 +63,18 @@ export function setDb(next) {
 
 export function hasFileHandle() {
   return fileHandle != null;
+}
+
+export function markDirty() {
+  dirty = true;
+}
+
+export function clearDirty() {
+  dirty = false;
+}
+
+export function isDirty() {
+  return dirty;
 }
 
 /**
@@ -61,26 +105,47 @@ export function normalizeDb(data) {
     d.catalogs = emptyDb().catalogs;
   }
   if (!Array.isArray(d.items)) d.items = [];
+  if (!Array.isArray(d.testPlans)) d.testPlans = [];
   d.version = typeof d.version === "number" ? d.version : 1;
+  if (!d.ui) {
+    d.ui = {
+      viewMode: "tree",
+      sortKey: null,
+      sortDir: "asc",
+      treeExpandedIds: [],
+      columnVisibility: {},
+    };
+  }
+  if (!d.meta) d.meta = {};
+  migrateProjectDb(d);
+  d.catalogs.statuses = [...STATUS_ORDER];
   return d;
 }
 
 export function emptyDb() {
-  return {
-    version: 1,
+  return normalizeDb({
+    version: 2,
     catalogs: {
       owners: [],
-      statuses: ["Backlog", "En progreso", "En revisión", "Bloqueada", "Completada"],
+      statuses: [...STATUS_ORDER],
       priorities: ["Alta", "Media", "Baja"],
       levels: ["EPIC", "TOPIC", "TASK", "SUBTASK"],
       epics: [],
     },
     items: [],
-  };
+    testPlans: [],
+    ui: {
+      viewMode: "tree",
+      sortKey: null,
+      sortDir: "asc",
+      treeExpandedIds: [],
+      columnVisibility: {},
+    },
+    meta: {},
+  });
 }
 
 /**
- * File System Access API: open JSON file
  * @returns {Promise<ProjectDb|null>}
  */
 export async function openDatabaseFile() {
@@ -99,8 +164,11 @@ export async function openDatabaseFile() {
     fileHandle = handle;
     const file = await handle.getFile();
     const text = await file.text();
-    const data = JSON.parse(text);
-    db = normalizeDb(data);
+    db = normalizeDb(JSON.parse(text));
+    db.meta = db.meta || {};
+    db.meta.lastOpenedFileLabel = file.name;
+    clearDirty();
+    db.meta.lastSavedAt = new Date().toISOString();
     return db;
   }
   return new Promise((resolve, reject) => {
@@ -117,6 +185,10 @@ export async function openDatabaseFile() {
         const text = await f.text();
         db = normalizeDb(JSON.parse(text));
         fileHandle = null;
+        db.meta = db.meta || {};
+        db.meta.lastOpenedFileLabel = f.name;
+        clearDirty();
+        db.meta.lastSavedAt = new Date().toISOString();
         resolve(db);
       } catch (e) {
         reject(e);
@@ -135,23 +207,19 @@ export async function saveDatabaseFile() {
   const blob = new Blob([text], { type: "application/json" });
 
   const w = /** @type {Window & { showSaveFilePicker?: Function }} */ (window);
-  if (fileHandle && w.showSaveFilePicker) {
-    const writable = await fileHandle.createWritable();
-    await writable.write(text);
-    await writable.close();
-    return;
-  }
-
   if (fileHandle) {
     const writable = await fileHandle.createWritable();
     await writable.write(text);
     await writable.close();
+    db.meta = db.meta || {};
+    db.meta.lastSavedAt = new Date().toISOString();
+    clearDirty();
     return;
   }
 
   if (w.showSaveFilePicker) {
     const handle = await w.showSaveFilePicker({
-      suggestedName: "project-db.json",
+      suggestedName: db.meta?.lastOpenedFileLabel || "project-db.json",
       types: [
         {
           description: "JSON",
@@ -163,10 +231,17 @@ export async function saveDatabaseFile() {
     const writable = await handle.createWritable();
     await writable.write(text);
     await writable.close();
+    db.meta = db.meta || {};
+    db.meta.lastOpenedFileLabel = handle.name || db.meta.lastOpenedFileLabel;
+    db.meta.lastSavedAt = new Date().toISOString();
+    clearDirty();
     return;
   }
 
-  downloadBlob(blob, "project-db.json");
+  downloadBlob(blob, db.meta?.lastOpenedFileLabel || "project-db.json");
+  db.meta = db.meta || {};
+  db.meta.lastSavedAt = new Date().toISOString();
+  clearDirty();
 }
 
 /**
@@ -187,6 +262,7 @@ function downloadBlob(blob, filename) {
 export function loadFromObject(data) {
   db = normalizeDb(data);
   fileHandle = null;
+  markDirty();
 }
 
 export function clearFileHandle() {

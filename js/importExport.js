@@ -3,6 +3,7 @@
  * @typedef {import('./dataService.js').ProjectDb} ProjectDb
  */
 import { normalizeDb } from "./dataService.js";
+import { DEFAULT_STATUS } from "./constants.js";
 import { createWorkItemFromForm } from "./workItem.js";
 
 const CSV_HEADERS = [
@@ -175,7 +176,7 @@ export function importCsvIntoDb(db, text) {
       definitionOk: /^(1|true|sí|si|yes)$/i.test(get("definitionok") || get("definitionOk")),
       releaseTarget: get("releasetarget") || get("releaseTarget"),
       notes: get("notes"),
-      status: "Backlog",
+      status: get("status") || DEFAULT_STATUS,
     };
 
     if (raw.parentId === "") raw.parentId = null;
@@ -219,6 +220,7 @@ export function exportXlsxSnapshot(db, filename = "project-snapshot.xlsx") {
     "inTracking",
     "definitionOk",
     "releaseTarget",
+    "rlse",
     "preVersion",
     "proVersion",
     "createdAt",
@@ -244,4 +246,89 @@ export function exportXlsxSnapshot(db, filename = "project-snapshot.xlsx") {
 export function parseProjectJson(jsonText) {
   const data = JSON.parse(jsonText);
   return normalizeDb(data);
+}
+
+/**
+ * Reemplaza base completa.
+ * @param {ProjectDb} current
+ * @param {ProjectDb} incoming
+ */
+export function replaceProjectData(current, incoming) {
+  const keepLabel = current.meta?.lastOpenedFileLabel;
+  current.version = incoming.version;
+  current.catalogs = incoming.catalogs;
+  current.items = incoming.items;
+  current.testPlans = incoming.testPlans || [];
+  current.ui = incoming.ui || current.ui;
+  current.meta = { ...incoming.meta, ...current.meta };
+  if (keepLabel) current.meta.lastOpenedFileLabel = keepLabel;
+}
+
+/**
+ * Fusiona ítems por id (incoming sobreescribe existentes).
+ * @param {ProjectDb} target
+ * @param {ProjectDb} incoming
+ * @returns {{ merged: number, added: number }}
+ */
+export function mergeItemsById(target, incoming) {
+  const byId = new Map(target.items.map((i) => [i.id, i]));
+  let added = 0;
+  let merged = 0;
+  for (const it of incoming.items) {
+    if (byId.has(it.id)) {
+      merged++;
+      Object.assign(byId.get(it.id), it);
+    } else {
+      added++;
+      target.items.push(it);
+    }
+  }
+  return { merged, added };
+}
+
+/**
+ * Exporta JSON mínimo plantilla para nuevos proyectos.
+ * @returns {string}
+ */
+export function exportTemplateJson() {
+  const tpl = {
+    version: 2,
+    catalogs: {
+      owners: ["Luis"],
+      statuses: ["BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "BLOCKED", "COMPLETED"],
+      priorities: ["Alta", "Media", "Baja"],
+      levels: ["EPIC", "TOPIC", "TASK", "SUBTASK"],
+      epics: ["LM Core"],
+    },
+    items: [
+      {
+        id: "EP-001",
+        parentId: null,
+        level: "EPIC",
+        order: 0,
+        title: "Ejemplo épica",
+        epic: "LM Core",
+        owner: "Luis",
+        priority: "Alta",
+        status: "BACKLOG",
+        inTracking: false,
+        definitionOk: true,
+        rlse: "",
+        releaseTarget: "",
+        createdAt: new Date().toISOString(),
+        targetDate: "",
+        completedAt: "",
+        blocked: false,
+        notes: "",
+      },
+    ],
+    testPlans: [],
+    ui: {
+      viewMode: "tree",
+      treeExpandedIds: [],
+      columnVisibility: {},
+    },
+    meta: {},
+  };
+  return JSON.stringify(tpl, null, 2);
 }

@@ -185,6 +185,12 @@ body {
   margin-bottom: 12px;
 }
 
+.form-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
 .input-search,
 .select,
 .textarea {
@@ -470,4 +476,95 @@ code {
   background: var(--bg);
   padding: 2px 4px;
   border-radius: 3px;
+}
+
+.panel-grid-wide {
+  grid-template-columns: 1fr;
+}
+
+.kpi-wide h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.kpi-muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.file-status-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.dirty-badge {
+  background: #fffae6;
+  color: #974f0c;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.saved-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
+
+.modal-wide {
+  max-width: 720px;
+}
+
+.link-open-panel {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.link-open-panel:hover {
+  text-decoration: underline;
+}
+
+.badge-status-backlog {
+  background: #dfe1e6;
+  color: #172b4d;
+}
+.badge-status-ready {
+  background: #deebff;
+  color: #0747a6;
+}
+.badge-status-in-progress {
+  background: #e3fcef;
+  color: #064;
+}
+.badge-status-in-review {
+  background: #fff0b3;
+  color: #533f04;
+}
+.badge-status-blocked {
+  background: #ffd2cc;
+  color: var(--danger);
+}
+.badge-status-completed {
+  background: #abf5d1;
+  color: #064;
 }
