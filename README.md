@@ -1,16 +1,17 @@
 # Last Mile Kanban
 
-Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tipo Kanban/Jira ligero. **Una sola fuente de datos** en JSON (`items`, catálogos, `testPlans`, preferencias `ui`). Las vistas **Panel**, **Lista general** (todas las tareas), **Pizarra** (solo TASK activas en seguimiento), **Completadas** y **Plan de pruebas** comparten el mismo modelo.
+Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tipo Kanban/Jira ligero. **Una sola fuente de datos** en JSON (`items`, catálogos, `testRuns`, `testPlans` vacío tras migración, preferencias `ui`). Las vistas **Panel**, **Lista general**, **Pizarra** (solo **TASK** en seguimiento), **Completadas** y **Plan de pruebas** comparten el mismo modelo.
 
 ## Cómo ejecutar
 
-1. **Recomendado:** servidor HTTP local (módulos ES y `fetch` del seed fallan con `file://`):
+1. **Servidor HTTP** (obligatorio para módulos ES y `fetch` del seed; no uses `file://`):
+
+   - **Windows:** doble clic en `run.bat` — abre el navegador y deja **un solo proceso** en la ventana (Python `http.server`, o `npx serve` si no hay Python).
+   - **Con Node:** en la carpeta del proyecto: `npm start` (equivale a `npx serve` en el puerto 8765).
 
    ```bash
-   npx serve .
+   npx serve . -l 8765
    ```
-
-   O en Windows: ejecuta `run.bat` (Python `http.server`).
 
 2. **Abrir base de datos:** botón **Abrir base de datos** y elige un JSON (p. ej. `data/project-db.json`).
 
@@ -19,11 +20,12 @@ Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tip
 ## Estados y modelo
 
 - Estados (v3): `BACKLOG`, `PENDING`, `IN_PROGRESS`, `BLOCKED`, `CERTIFICATION`, `DONE` (JSON v1/v2 y etiquetas en español se migran al cargar).
-- `inTracking`: tarea en seguimiento operativo; la **Pizarra** muestra solo ítems `level === TASK` con `inTracking` (incluye hechas si siguen en seguimiento).
-- `type`: `task` | `bug` | `feature` por ítem.
+- `inTracking`: seguimiento operativo; la **Pizarra** muestra solo **`level === TASK`** con `inTracking` (incluye completadas si siguen en seguimiento). Épicas, tópicos y subtareas no se activan para pizarra.
+- `type`: `task` | `bug` | `feature` por ítem (independiente del nivel EPIC/TOPIC/TASK/SUBTASK).
 - `activityLog` / `comments`: historial y comentarios por tarea (append-only).
-- `rlse`: identificador de release/certificación (completadas y planes de prueba).
-- **Plan de pruebas:** borrador al completar una tarea; edición en la pestaña **Plan de pruebas**.
+- `rlse`: identificador de release/certificación.
+- **Pruebas:** varias entradas por tarea en `testRuns[]` (nombre, resultado, fecha, notas…). Los JSON antiguos con `testPlans` se migran al abrir.
+- **Lista general:** vista **Plana** o **Árbol** (persistente en `ui.viewMode`).
 
 ## Importar / exportar
 
@@ -35,6 +37,7 @@ Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tip
 ```
 ├── index.html
 ├── run.bat
+├── package.json
 ├── css/styles.css
 ├── data/project-db.json
 ├── js/

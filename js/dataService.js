@@ -17,6 +17,17 @@
  *   notes: string,
  * }} TestPlan
  * @typedef {{
+ *   id: string,
+ *   taskId: string,
+ *   name: string,
+ *   outcome: string,
+ *   executedAt: string,
+ *   tester: string,
+ *   environment: string,
+ *   notes: string,
+ *   rlse: string,
+ * }} TestRun
+ * @typedef {{
  *   columnVisibility?: Record<string, boolean>,
  *   sortKey?: string|null,
  *   sortDir?: 'asc'|'desc',
@@ -35,6 +46,7 @@
  *   items: WorkItem[],
  *   ui?: UiConfig,
  *   testPlans?: TestPlan[],
+ *   testRuns?: TestRun[],
  *   meta?: { lastOpenedFileLabel?: string, lastSavedAt?: string },
  * }} ProjectDb
  */
@@ -106,10 +118,11 @@ export function normalizeDb(data) {
   }
   if (!Array.isArray(d.items)) d.items = [];
   if (!Array.isArray(d.testPlans)) d.testPlans = [];
+  if (!Array.isArray(d.testRuns)) d.testRuns = [];
   d.version = typeof d.version === "number" ? d.version : 1;
   if (!d.ui) {
     d.ui = {
-      viewMode: "tree",
+      viewMode: "flat",
       sortKey: null,
       sortDir: "asc",
       treeExpandedIds: [],
@@ -134,8 +147,9 @@ export function emptyDb() {
     },
     items: [],
     testPlans: [],
+    testRuns: [],
     ui: {
-      viewMode: "tree",
+      viewMode: "flat",
       sortKey: null,
       sortDir: "asc",
       treeExpandedIds: [],

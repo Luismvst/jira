@@ -63,6 +63,10 @@
           <select id="filter-epic" class="select"></select>
           <select id="filter-status-bl" class="select" aria-label="Estado"></select>
           <select id="filter-priority-bl" class="select" aria-label="Prioridad"></select>
+          <span class="toolbar-sep" aria-hidden="true"></span>
+          <span class="view-mode-label">Vista:</span>
+          <button type="button" id="btn-view-flat" class="btn btn-sm" title="Tabla plana tipo Excel">Plana</button>
+          <button type="button" id="btn-view-tree" class="btn btn-sm" title="Jerarquía épica → subtarea">Árbol</button>
           <button type="button" id="btn-refresh" class="btn btn-ghost">Refrescar vistas</button>
           <button type="button" id="btn-cleanup" class="btn btn-ghost">Limpiar seguimiento &gt;30d</button>
           <button type="button" id="btn-new-item" class="btn btn-primary">Nueva tarea</button>
@@ -101,7 +105,7 @@
           <span class="board-mode-label">Vista:</span>
           <label class="board-mode"><input type="radio" name="board-mode" id="board-mode-status" checked /> Por estado</label>
           <label class="board-mode"><input type="radio" name="board-mode" id="board-mode-assignee" /> Por responsable</label>
-          <p class="hint board-hint">TASK y TOPIC en seguimiento (no EPIC ni SUBTASK). Arrastra entre columnas o swimlanes. Doble clic abre detalle.</p>
+          <p class="hint board-hint">Solo <strong>TASK</strong> en seguimiento aparecen aquí. Arrastra entre columnas o swimlanes; la zona inferior de cada columna acepta soltar. Doble clic abre detalle.</p>
         </div>
         <div id="board-root" class="board-root"></div>
       </section>
@@ -123,7 +127,7 @@
                 <th>Resp.</th>
                 <th>Completada</th>
                 <th>RLSE</th>
-                <th>Plan pruebas</th>
+                <th>Pruebas</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -134,19 +138,19 @@
 
       <section id="view-testplans" class="view hidden">
         <div class="view-toolbar">
-          <input type="search" id="filter-text-tp" placeholder="Filtrar plan / RLSE…" class="input-search" />
+          <input type="search" id="filter-text-tp" placeholder="Filtrar por nombre, task, RLSE…" class="input-search" />
         </div>
         <div class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
-                <th>ID plan</th>
+                <th>ID</th>
                 <th>Task</th>
-                <th>Título</th>
+                <th>Nombre</th>
+                <th>Fecha</th>
+                <th>Resultado</th>
                 <th>RLSE</th>
-                <th>Estado</th>
                 <th>Entorno</th>
-                <th>Certificación</th>
                 <th>Acciones</th>
               </tr>
             </thead>

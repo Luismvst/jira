@@ -1,6 +1,6 @@
 # Checklist de pruebas manuales (Last Mile Kanban)
 
-Ejecutar con **servidor HTTP local** (`run.bat` o `npx serve .`). No usar `file://` para el seed.
+Ejecutar con **servidor HTTP local** (`run.bat` o `npm start` / `npx serve . -l 8765`). No usar `file://` para el seed.
 
 ---
 
@@ -10,6 +10,7 @@ Ejecutar con **servidor HTTP local** (`run.bat` o `npx serve .`). No usar `file:
 - [ ] Con seed por defecto: aparece toast “Datos iniciales cargados” o datos visibles en Panel / Lista general.
 - [ ] **Abrir base de datos**: seleccionar un JSON válido; etiqueta de archivo y “Último guardado” coherentes.
 - [ ] **Guardar** (y **Ctrl+S**): archivo se escribe; indicador “Cambios sin guardar” se comporta bien.
+- [ ] `run.bat` deja **una ventana** con el servidor (o prueba `npm start` si tienes Node).
 
 ---
 
@@ -19,18 +20,19 @@ Ejecutar con **servidor HTTP local** (`run.bat` o `npx serve .`). No usar `file:
 - [ ] Al ir a **Pizarra**, el contenido se refresca (tarjetas al día).
 - [ ] Con modal de detalle abierto: **Esc** cierra el modal.
 - [ ] Con modal cerrado: **Esc** no rompe nada.
-- [ ] **Ayuda** lista atajos (Ctrl+S, Esc, pizarra, lista).
+- [ ] **Ayuda** describe TASK en pizarra y pruebas acumulativas.
 
 ---
 
 ## Lista general
 
-- [ ] Árbol por defecto (sin filtros de texto/estado/prioridad): expandir/contraer nodos.
-- [ ] Activar **filtros** (texto, responsable, épica, estado, prioridad): pasa a lista plana y respeta filtros.
+- [ ] **Vista Plana / Árbol**: el modo activo se ve resaltado; al guardar y recargar se conserva (`ui.viewMode`).
+- [ ] Con **filtros** (texto, responsable, épica, estado, prioridad): siempre lista plana aunque el modo sea árbol.
+- [ ] En modo **árbol** sin filtros: expandir/contraer nodos.
 - [ ] **Sin resultados**: mensaje “Sin resultados” (no tabla rota).
 - [ ] Clic en **cabeceras ordenables**: orden cambia; repetir invierte dirección.
 - [ ] Columna **Activa**: badge coherente con `inTracking`.
-- [ ] Columna **Tipo**: task / bug / feature visible.
+- [ ] **Activar** solo en filas **TASK**; en EPIC/TOPIC/SUBTASK aparece “—” con tooltip.
 - [ ] Clic en **ID** abre modal de edición.
 
 ---
@@ -38,70 +40,73 @@ Ejecutar con **servidor HTTP local** (`run.bat` o `npx serve .`). No usar `file:
 ## Activación y validaciones
 
 - [ ] **Activar** en ítem **sin responsable**: toast con error claro; no entra en pizarra.
-- [ ] **Activar** sin definición mínima (sin Def. OK y resumen corto): toast con error.
-- [ ] **Activar** en TASK o TOPIC válida: entra en pizarra (estado pasa a Pendiente si estaba en Backlog).
-- [ ] **Activar** con descendientes (confirmación): solo ítems válidos se actualizan; errores listados si hay hijos inválidos.
+- [ ] **Activar** sin definición mínima: toast con error.
+- [ ] **Activar** en **TASK** válida: entra en pizarra (Pendiente si estaba en Backlog).
+- [ ] **Activar** con confirmación de hijas: solo **TASK** descendientes válidas se marcan; errores listados si hay hijas inválidas.
+- [ ] No debe poder “activarse” una épica/tópico/subtarea desde la lista (sin botón).
 
 ---
 
 ## Pizarra
 
-- [ ] **Vacía** (ninguna TASK/TOPIC en seguimiento): mensaje “Pizarra vacía” + requisitos.
-- [ ] Con tareas en pizarra: línea resumen “N tareas en pizarra”.
-- [ ] **Filtros** de pizarra (texto, responsable, épica): reducen tarjetas; si ninguna coincide: mensaje + **Quitar filtros** restaura.
-- [ ] **Por estado**: cinco columnas (Pendiente … Completada); contadores por columna.
-- [ ] **Por responsable**: swimlanes; columna “Sin asignar” si aplica.
-- [ ] **Hover / tooltip** en tarjeta: título largo visible en tooltip nativo.
-- [ ] **Arrastrar** a otra columna de estado: estado y persistencia tras guardar JSON.
-- [ ] **Arrastrar** a columna Completada: tarea Done; sigue en pizarra si `inTracking`.
-- [ ] **Modo por responsable**: soltar en otra persona cambia responsable y se refleja al guardar.
+- [ ] **Vacía**: mensaje coherente (solo TASK en seguimiento) + requisitos.
+- [ ] Con tareas en pizarra: resumen “N tareas en pizarra”.
+- [ ] **Filtros** de pizarra: reducen tarjetas; si ninguna coincide: mensaje + **Quitar filtros**.
+- [ ] **Por estado**: cinco columnas; contadores por columna.
+- [ ] **Por responsable**: swimlanes; “Sin asignar” si aplica.
+- [ ] **Arrastrar** entre columnas: estado persiste al guardar JSON.
+- [ ] **Soltar** al **final** de columna o en columna casi vacía: cómodo (zona amplia / cola).
+- [ ] **Modo por responsable**: soltar en otra persona cambia responsable.
 - [ ] **Doble clic** en tarjeta abre detalle.
-- [ ] Scroll horizontal en columnas estrechas: usable.
+- [ ] Scroll horizontal en columnas: usable.
 
 ---
 
 ## Modal de detalle
 
 - [ ] Pestañas **Datos / Subtareas / Comentarios / Actividad** cambian panel.
+- [ ] **En pizarra** deshabilitado si el nivel no es TASK; al guardar no deja `inTracking` incoherente.
+- [ ] Tarea **completada**: bloque “Ver / añadir pruebas” y contador de entradas.
 - [ ] **Guardar** en datos persiste cambios; toast “Cambios guardados”.
-- [ ] Crear **Nueva tarea** desde lista: formulario guarda sin error (antes fallaba sin `readFieldsFromModal`).
-- [ ] **Comentario**: publicar añade línea en comentarios y en actividad.
-- [ ] **Subtarea rápida**: crea ST-xxx y aparece en pestaña Subtareas.
-- [ ] **Actividad**: eventos recientes (estado, owner, activación, etc.) legibles.
+- [ ] **Nueva tarea** desde lista: formulario guarda sin error.
+- [ ] **Comentario** y **Subtarea rápida** funcionan.
+- [ ] **Actividad**: eventos legibles.
 
 ---
 
-## Completadas y reapertura
+## Completadas, pruebas y migración
 
-- [ ] **Completar** desde lista: ítem pasa a Completadas; plan borrador si aplica.
-- [ ] **Reabrir**: vuelve a backlog y sale de completadas.
-- [ ] **Limpiar seguimiento >30d** (solo ítems completados antiguos en tracking): no borra datos críticos.
+- [ ] **Completar** desde lista: ítem pasa a Completadas (sin crear plan automático).
+- [ ] **Pruebas** en completadas: modal con lista + formulario **Añadir**; varias entradas por la misma tarea.
+- [ ] Clic en nombre de prueba: edición individual; **Guardar** y **Eliminar** coherentes.
+- [ ] Pestaña **Plan de pruebas**: tabla de todas las entradas `testRuns`.
+- [ ] **Reabrir** tarea completada: vuelve a backlog.
+- [ ] **Limpiar seguimiento >30d**: no borra datos críticos.
+- [ ] Abrir JSON **antiguo con `testPlans`**: tras cargar, datos en `testRuns` (revisar en export JSON).
 
 ---
 
 ## Importar / exportar
 
-- [ ] **Exportar JSON**: descarga coherente con lo en pantalla.
-- [ ] **Importar** reemplazar / fusionar: no corrompe IDs conocidos (revisar mensaje de informe).
+- [ ] **Exportar JSON**: incluye `testRuns`; `testPlans` vacío si ya migró.
+- [ ] **Importar** reemplazar / fusionar ítems: no corrompe lo esperado (fusionar no mezcla `testRuns` de incoming — solo ítems).
 
 ---
 
-## Persistencia y migración
+## Persistencia
 
-- [ ] Guardar, **recargar página** (F5), **Abrir** mismo archivo: estados, comentarios, log y pizarra iguales.
-- [ ] Abrir JSON **antiguo (v2)**: migración silenciosa a v3; estados renombrados correctamente.
+- [ ] Guardar, **recargar página** (F5), **Abrir** mismo archivo: pizarra, pruebas y `viewMode` coherentes.
 
 ---
 
 ## Regresiones rápidas
 
-- [ ] **Panel**: KPIs y enlaces abren detalle.
-- [ ] **Plan de pruebas**: abrir / editar / eliminar sin excepción.
-- [ ] Tablas largas: **cabecera** de tabla permanece visible al hacer scroll vertical (sticky).
+- [ ] **Panel**: KPI “En seguimiento” solo lista TASK en seguimiento.
+- [ ] Tablas: cabecera **sticky** al hacer scroll vertical.
 
 ---
 
 ## Entorno
 
 - [ ] Probar en **Chromium** (recomendado para File System Access).
-- [ ] Opcional: ventana estrecha (~360px): toolbar y pizarra siguen usables (scroll).
+- [ ] Ventana estrecha: toolbar y pizarra usables (scroll).

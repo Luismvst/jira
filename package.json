@@ -1,0 +1,8 @@
+{
+  "name": "last-mile-kanban",
+  "private": true,
+  "description": "Kanban local — servidor estático opcional",
+  "scripts": {
+    "start": "npx --yes serve . -l 8765"
+  }
+}

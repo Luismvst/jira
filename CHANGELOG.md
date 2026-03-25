@@ -1,5 +1,14 @@
 # Changelog — Last Mile Kanban
 
+## 2026-03-25 (tarde) — Iteración dominio, pruebas acumulativas, DX
+
+- **Pizarra:** solo **TASK** en columnas (TOPIC retirado); `inTracking` incoherente en otros niveles se limpia al cargar JSON.
+- **Activar:** solo en filas TASK; envío a seguimiento solo actualiza TASK (incl. hijas TASK si confirmas).
+- **Lista general:** conmutador **Plana / Árbol** (`ui.viewMode`); por defecto plana en bases nuevas; con filtros sigue forzándose plana.
+- **DnD:** columnas con más altura útil y franja inferior (`board-col-tail`) para soltar con más margen.
+- **Pruebas:** modelo **`testRuns[]`** (varias por tarea); migración automática desde `testPlans` legacy; UI de registro rápido + edición por fila.
+- **Arranque:** `run.bat` en una ventana (Python o `npx serve`); `npm start` y `package.json` opcional.
+
 ## 2026-03-25 — Pizarra operativa, workflow v3, actividad y comentarios
 
 - **Workflow v3:** `PENDING`, `CERTIFICATION`, `DONE` sustituyen a `READY`, `IN_REVIEW`, `COMPLETED`; migración automática al abrir JSON antiguos (`ProjectDb` v3).

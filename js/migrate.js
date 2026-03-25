@@ -1,5 +1,6 @@
 /** @typedef {import('./dataService.js').ProjectDb} ProjectDb */
-import { STATUS, DEFAULT_STATUS, STATUS_ORDER } from "./constants.js";
+import { STATUS, DEFAULT_STATUS, STATUS_ORDER, isBoardVisibleLevel } from "./constants.js";
+import { migrateLegacyTestPlansIntoRuns } from "./testPlans.js";
 
 /** Mapa desde valores legacy (español / mezcla / v2) a STATUS v3 */
 const LEGACY_STATUS_MAP = {
@@ -68,7 +69,12 @@ export function migrateProjectDb(d) {
 
   for (const it of d.items) {
     migrateWorkItem(it);
+    if (it.inTracking && !isBoardVisibleLevel(it.level)) {
+      it.inTracking = false;
+    }
   }
+
+  migrateLegacyTestPlansIntoRuns(d);
 
   if (fromVersion < 3) {
     d.version = 3;

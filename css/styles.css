@@ -720,6 +720,25 @@ code {
   padding: 6px;
   overflow-y: auto;
   flex: 1;
+  min-height: min(320px, 50vh);
+  display: flex;
+  flex-direction: column;
+}
+.board-col-cards {
+  flex: 0 1 auto;
+  min-height: 48px;
+}
+.board-col-tail {
+  flex: 1 1 auto;
+  min-height: 100px;
+  margin-top: 4px;
+  border-radius: 4px;
+  border: 1px dashed transparent;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.board-column.drag-over .board-col-tail {
+  border-color: var(--primary);
+  background: rgba(0, 82, 204, 0.06);
 }
 .board-col-empty {
   margin: 0;
@@ -740,6 +759,10 @@ code {
 }
 .board-card.dragging {
   opacity: 0.55;
+  cursor: grabbing;
+}
+.board-card:active {
+  cursor: grabbing;
 }
 .board-card-top {
   display: flex;
@@ -897,4 +920,68 @@ body.view-is-board .main {
   .toast {
     animation: none;
   }
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.view-mode-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.btn.btn-sm.btn-active {
+  background: var(--tracking-bg);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+.cell-no-action {
+  display: inline-block;
+  min-width: 1.25em;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: help;
+}
+.data-table tbody td {
+  vertical-align: middle;
+}
+.data-table tbody tr:hover {
+  background: rgba(9, 30, 66, 0.04);
+}
+.test-run-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+.test-run-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.test-run-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex: 1;
+}
+.test-run-add {
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+.test-run-add-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+.form-grid-tight {
+  gap: 8px 12px;
+}
+.form-grid-tight label {
+  font-size: 0.8rem;
 }

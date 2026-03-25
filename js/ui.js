@@ -17,8 +17,21 @@ import {
   toggleBlocked,
   validateForTracking,
 } from "./workItem.js";
-import { STATUS, STATUS_COMPLETED, STATUS_ORDER, isBoardVisibleLevel, statusLabel } from "./constants.js";
-import { deleteTestPlanById, ensureDraftTestPlan, findTestPlanByTaskId } from "./testPlans.js";
+import {
+  STATUS,
+  STATUS_COMPLETED,
+  STATUS_ORDER,
+  isBoardVisibleLevel,
+  isKanbanActivatableLevel,
+  statusLabel,
+} from "./constants.js";
+import {
+  addTestRun,
+  countTestRunsForTask,
+  deleteTestRunById,
+  findTestRunById,
+  listTestRunsForTask,
+} from "./testPlans.js";
 import { rowMatchesGlobalSearch } from "./filters.js";
 import { addLogEntry, logFieldChange } from "./activityLog.js";
 import { addComment } from "./comments.js";
@@ -232,15 +245,21 @@ export function mount(api) {
     });
 
     const hasFilter = Boolean(q || ow || ep || stf || prf);
+    const viewFlat = (db.ui?.viewMode || "flat") === "flat" || hasFilter;
     const rowsHtml = [];
 
-    const rowActions = (nodeId) => `
+    const rowActions = (node) => {
+      const trackBtn = isKanbanActivatableLevel(node.level)
+        ? `<button type="button" class="btn btn-sm" data-action="track" data-id="${escapeHtml(node.id)}">Activar</button>`
+        : `<span class="cell-no-action" title="Solo las tareas (TASK) pueden ir a la pizarra">—</span>`;
+      return `
       <div class="cell-actions">
-        <button type="button" class="btn btn-sm" data-action="track" data-id="${escapeHtml(nodeId)}">Activar</button>
-        <button type="button" class="btn btn-sm" data-action="done" data-id="${escapeHtml(nodeId)}">Completar</button>
-        <button type="button" class="btn btn-sm" data-action="block" data-id="${escapeHtml(nodeId)}">Bloq./Des.</button>
-        <button type="button" class="btn btn-sm" data-action="edit" data-id="${escapeHtml(nodeId)}">Editar</button>
+        ${trackBtn}
+        <button type="button" class="btn btn-sm" data-action="done" data-id="${escapeHtml(node.id)}">Completar</button>
+        <button type="button" class="btn btn-sm" data-action="block" data-id="${escapeHtml(node.id)}">Bloq./Des.</button>
+        <button type="button" class="btn btn-sm" data-action="edit" data-id="${escapeHtml(node.id)}">Editar</button>
       </div>`;
+    };
 
     const rowCells = (node, pad, toggle) => `<tr class="${rowClass(node)}" data-id="${escapeHtml(node.id)}">
         <td style="padding-left:${pad}px">${toggle}</td>
@@ -257,10 +276,10 @@ export function mount(api) {
         <td>${escapeHtml(node.releaseTarget || "")}</td>
         <td>${escapeHtml(node.rlse || "")}</td>
         <td>${escapeHtml(node.targetDate || "")}</td>
-        <td>${rowActions(node.id)}</td>
+        <td>${rowActions(node)}</td>
       </tr>`;
 
-    if (hasFilter) {
+    if (viewFlat) {
       const flat = [...filtered];
       sortBacklogFlat(flat, db);
       for (const node of flat) {
@@ -268,6 +287,7 @@ export function mount(api) {
       }
       tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="15">Sin resultados</td></tr>';
       updateBacklogSortHeaders(db);
+      updateViewModeButtons(db);
       return;
     }
 
@@ -299,7 +319,37 @@ export function mount(api) {
 
     tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="15">Sin datos</td></tr>';
     updateBacklogSortHeaders(db);
+    updateViewModeButtons(db);
   }
+
+  const btnViewFlat = document.getElementById("btn-view-flat");
+  const btnViewTree = document.getElementById("btn-view-tree");
+
+  /**
+   * @param {ProjectDb} db
+   */
+  function updateViewModeButtons(db) {
+    const flat = (db.ui?.viewMode || "flat") === "flat";
+    btnViewFlat?.classList.toggle("btn-active", flat);
+    btnViewTree?.classList.toggle("btn-active", !flat);
+  }
+
+  btnViewFlat?.addEventListener("click", () => {
+    const d = getDb();
+    if (!d) return;
+    if (!d.ui) d.ui = {};
+    d.ui.viewMode = "flat";
+    onDataChange();
+    renderBacklog();
+  });
+  btnViewTree?.addEventListener("click", () => {
+    const d = getDb();
+    if (!d) return;
+    if (!d.ui) d.ui = {};
+    d.ui.viewMode = "tree";
+    onDataChange();
+    renderBacklog();
+  });
 
   function addSubtaskQuick(parentId) {
     const db = getDb();
@@ -395,29 +445,78 @@ export function mount(api) {
       if (!id) return;
       if (action === "reopen") doReopen(id);
       if (action === "edit") openDetail(id);
-      if (action === "testplan") openTestPlanForTask(id);
+      if (action === "testplan") openTestRunsForTask(id);
     });
 
     tbodyTestPlans?.addEventListener("click", (e) => {
       const t = /** @type {HTMLElement} */ (e.target);
-      const delBtn = t.closest("[data-delete-tp]");
+      const delBtn = t.closest("[data-delete-tr]");
       if (delBtn) {
-        const pid = delBtn.getAttribute("data-delete-tp");
-        if (pid) doDeleteTestPlan(pid);
+        const rid = delBtn.getAttribute("data-delete-tr");
+        if (rid) doDeleteTestRun(rid);
         return;
       }
-      const openBtn = t.closest("[data-open-tp]");
+      const openBtn = t.closest("[data-open-tr]");
       if (openBtn) {
-        openTestPlanModal(openBtn.getAttribute("data-open-tp"));
+        openSingleTestRunModal(openBtn.getAttribute("data-open-tr"));
       }
     });
 
     modalBody?.addEventListener("click", (e) => {
       const t = /** @type {HTMLElement} */ (e.target);
-      const delBtn = t.closest("[data-delete-tp]");
+      const openTrInModal = t.closest("[data-open-tr]");
+      if (openTrInModal && modalBody?.contains(openTrInModal)) {
+        const rid = openTrInModal.getAttribute("data-open-tr");
+        if (rid) openSingleTestRunModal(rid);
+        return;
+      }
+      const openRuns = t.closest("[data-open-test-runs]");
+      if (openRuns) {
+        const tid = openRuns.getAttribute("data-open-test-runs");
+        if (tid) openTestRunsForTask(tid);
+        return;
+      }
+      const addRunBtn = t.closest("[data-add-test-run]");
+      if (addRunBtn) {
+        const panel = t.closest(".test-runs-panel");
+        const tid = panel?.getAttribute("data-task-id");
+        const db = getDb();
+        if (!tid || !db || !modalBody) return;
+        const nameEl = modalBody.querySelector("[data-tr-name]");
+        const outEl = modalBody.querySelector("[data-tr-outcome]");
+        const dateEl = modalBody.querySelector("[data-tr-date]");
+        const testerEl = modalBody.querySelector("[data-tr-tester]");
+        const envEl = modalBody.querySelector("[data-tr-env]");
+        const notesEl = modalBody.querySelector("[data-tr-notes]");
+        const name = nameEl instanceof HTMLInputElement ? nameEl.value.trim() : "";
+        if (!name) {
+          toast("Indica un nombre o título para la prueba.");
+          return;
+        }
+        addTestRun(db, tid, {
+          name,
+          outcome: outEl instanceof HTMLSelectElement ? outEl.value : "PENDIENTE",
+          executedAt: dateEl instanceof HTMLInputElement ? dateEl.value : "",
+          tester: testerEl instanceof HTMLInputElement ? testerEl.value : "",
+          environment: envEl instanceof HTMLSelectElement ? envEl.value : "PRE",
+          notes: notesEl instanceof HTMLTextAreaElement ? notesEl.value : "",
+        });
+        onDataChange();
+        modalBody.innerHTML = buildTestRunsPanel(db, tid);
+        renderAll();
+        toast("Prueba registrada.");
+        return;
+      }
+      const delBtn = t.closest("[data-delete-tr]");
       if (delBtn) {
-        const pid = delBtn.getAttribute("data-delete-tp");
-        if (pid) doDeleteTestPlan(pid);
+        const rid = delBtn.getAttribute("data-delete-tr");
+        if (rid) doDeleteTestRun(rid);
+        return;
+      }
+      const delBtnLegacy = t.closest("[data-delete-tp]");
+      if (delBtnLegacy) {
+        const rid = delBtnLegacy.getAttribute("data-delete-tp");
+        if (rid) doDeleteTestRun(rid);
         return;
       }
       const openL = t.closest("[data-open]");
@@ -465,21 +564,157 @@ export function mount(api) {
     });
   }
 
+  function restoreDefaultModalFooter() {
+    if (modalSave) {
+      modalSave.textContent = "Guardar";
+      modalSave.onclick = () => saveModal();
+    }
+  }
+
   /**
-   * @param {string} planId
+   * @param {string} runId
    */
-  function doDeleteTestPlan(planId) {
+  function doDeleteTestRun(runId) {
     const db = getDb();
     if (!db) return;
-    if (!confirm("¿Eliminar este plan de pruebas? No se puede deshacer.")) return;
-    if (!deleteTestPlanById(db, planId)) {
-      toast("No se encontró el plan.");
+    if (!confirm("¿Eliminar este registro de prueba?")) return;
+    const r = findTestRunById(db, runId);
+    if (!deleteTestRunById(db, runId)) {
+      toast("No se encontró el registro.");
       return;
     }
     onDataChange();
+    renderAll();
+    toast("Registro eliminado.");
+    if (modalOverlay && !modalOverlay.classList.contains("hidden") && r?.taskId) {
+      const panel = modalBody?.querySelector(".test-runs-panel");
+      if (panel && panel.getAttribute("data-task-id") === r.taskId) {
+        if (modalBody) modalBody.innerHTML = buildTestRunsPanel(db, r.taskId);
+      } else if (modalBody?.querySelector("[data-tr-edit-id]")) {
+        closeModal();
+      }
+    }
+  }
+
+  /**
+   * @param {ProjectDb} db
+   * @param {string} taskId
+   */
+  function buildTestRunsPanel(db, taskId) {
+    const task = db.items.find((i) => i.id === taskId);
+    const runs = listTestRunsForTask(db, taskId);
+    const rows = runs
+      .map(
+        (r) => `<li class="test-run-row">
+        <button type="button" class="btn btn-ghost btn-sm" data-open-tr="${escapeHtml(r.id)}">${escapeHtml(r.name)}</button>
+        <span class="test-run-meta">${escapeHtml(r.outcome)} · ${escapeHtml((r.executedAt || "").slice(0, 10) || "—")}</span>
+        <button type="button" class="btn btn-sm btn-ghost" data-delete-tr="${escapeHtml(r.id)}">Eliminar</button>
+      </li>`
+      )
+      .join("");
+    const opts = ["PENDIENTE", "OK", "KO", "N/A"].map(
+      (o) => `<option value="${o}">${o}</option>`
+    ).join("");
+    return `<div class="test-runs-panel" data-task-id="${escapeHtml(taskId)}">
+      <p class="hint">${task ? escapeHtml(task.id + " — " + task.title) : ""}</p>
+      <ul class="test-run-list">${rows || "<li class='hint'>Sin pruebas registradas aún.</li>"}</ul>
+      <div class="test-run-add card">
+        <h4 class="test-run-add-title">Añadir prueba</h4>
+        <div class="form-grid form-grid-tight">
+          <label>Nombre</label><input data-tr-name type="text" placeholder="Ej. Login, regresión checkout…" />
+          <label>Resultado</label><select data-tr-outcome>${opts}</select>
+          <label>Fecha</label><input data-tr-date type="date" />
+          <label>Tester</label><input data-tr-tester type="text" value="${escapeHtml(task?.owner || "")}" />
+          <label>Entorno</label><select data-tr-env>${["PRE", "PRO", "DEV"].map((env) => `<option value="${env}">${env}</option>`).join("")}</select>
+          <label>Notas</label><textarea data-tr-notes rows="2" placeholder="Opcional"></textarea>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-add-test-run>Registrar prueba</button>
+      </div>
+    </div>`;
+  }
+
+  function openTestRunsForTask(taskId) {
+    const db = getDb();
+    if (!db) return;
+    const task = db.items.find((i) => i.id === taskId);
+    if (!task || !isCompleted(task)) {
+      toast("Las pruebas se registran sobre tareas completadas.");
+      return;
+    }
+    createMode = false;
+    editingItem = null;
+    modalTitle.textContent = `Pruebas — ${taskId}`;
+    modalBody.innerHTML = buildTestRunsPanel(db, taskId);
+    modalOverlay?.classList.remove("hidden");
+    if (modalSave) {
+      modalSave.textContent = "Cerrar";
+      modalSave.onclick = () => {
+        closeModal();
+      };
+    }
+  }
+
+  /**
+   * @param {string|null} runId
+   */
+  function openSingleTestRunModal(runId) {
+    const db = getDb();
+    if (!db || !runId) return;
+    const r = findTestRunById(db, runId);
+    if (!r) return;
+    createMode = false;
+    editingItem = null;
+    modalTitle.textContent = `Prueba ${r.id}`;
+    modalBody.innerHTML = buildSingleTestRunForm(r);
+    modalOverlay?.classList.remove("hidden");
+    if (modalSave) {
+      modalSave.textContent = "Guardar";
+      modalSave.onclick = () => saveSingleTestRunModal(r.id);
+    }
+  }
+
+  /**
+   * @param {import('./dataService.js').TestRun} r
+   */
+  function buildSingleTestRunForm(r) {
+    const opts = ["PENDIENTE", "OK", "KO", "N/A"].map(
+      (o) => `<option value="${o}" ${r.outcome === o ? "selected" : ""}>${o}</option>`
+    ).join("");
+    return `
+      <input type="hidden" data-tr-edit-id value="${escapeHtml(r.id)}" />
+      <div class="form-grid">
+        <label>ID</label><input value="${escapeHtml(r.id)}" readonly />
+        <label>Task</label><input value="${escapeHtml(r.taskId)}" readonly />
+        <label>Nombre</label><input data-tr-field="name" value="${escapeHtml(r.name)}" />
+        <label>Resultado</label><select data-tr-field="outcome">${opts}</select>
+        <label>Fecha</label><input data-tr-field="executedAt" type="date" value="${escapeHtml((r.executedAt || "").slice(0, 10))}" />
+        <label>Tester</label><input data-tr-field="tester" value="${escapeHtml(r.tester)}" />
+        <label>Entorno</label><select data-tr-field="environment">${["PRE", "PRO", "DEV"].map((env) => `<option value="${env}" ${r.environment === env ? "selected" : ""}>${env}</option>`).join("")}</select>
+        <label>RLSE</label><input data-tr-field="rlse" value="${escapeHtml(r.rlse)}" />
+        <label>Notas</label><textarea data-tr-field="notes" rows="4">${escapeHtml(r.notes)}</textarea>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-sm" data-delete-tr="${escapeHtml(r.id)}">Eliminar</button>
+      </div>`;
+  }
+
+  function saveSingleTestRunModal(runId) {
+    const db = getDb();
+    if (!db) return;
+    const r = findTestRunById(db, runId);
+    if (!r) return;
+    modalBody?.querySelectorAll("[data-tr-field]").forEach((el) => {
+      const field = el.getAttribute("data-tr-field");
+      if (!field) return;
+      /** @type {*} */ (r)[field] = /** @type {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} */ (el).value;
+    });
+    r.name = String(r.name || "").trim() || r.name;
+    const task = db.items.find((i) => i.id === r.taskId);
+    if (task && r.rlse) task.rlse = String(r.rlse);
+    onDataChange();
     closeModal();
     renderAll();
-    toast("Plan de pruebas eliminado.");
+    toast("Prueba actualizada.");
   }
 
   function renderDone() {
@@ -497,8 +732,8 @@ export function mount(api) {
 
     tbodyDone.innerHTML = rows
       .map((it) => {
-        const tp = findTestPlanByTaskId(db, it.id);
-        const tpLabel = tp ? tp.id : "—";
+        const n = countTestRunsForTask(db, it.id);
+        const tpLabel = n ? `${n} prueba(s)` : "—";
         return `<tr class="${rowClass(it)}" data-id="${escapeHtml(it.id)}">
       <td><button type="button" class="btn btn-ghost link-open" data-open="${escapeHtml(it.id)}">${escapeHtml(it.id)}</button></td>
       <td>${escapeHtml(it.level)}</td>
@@ -510,7 +745,7 @@ export function mount(api) {
       <td>${escapeHtml(tpLabel)}</td>
       <td class="cell-actions">
         <button type="button" class="btn btn-sm" data-action="edit" data-id="${escapeHtml(it.id)}">Editar</button>
-        <button type="button" class="btn btn-sm" data-action="testplan" data-id="${escapeHtml(it.id)}">Plan pruebas</button>
+        <button type="button" class="btn btn-sm" data-action="testplan" data-id="${escapeHtml(it.id)}">Pruebas</button>
         <button type="button" class="btn btn-sm" data-action="reopen" data-id="${escapeHtml(it.id)}">Reabrir</button>
       </td>
     </tr>`;
@@ -522,107 +757,40 @@ export function mount(api) {
     const db = getDb();
     if (!db || !tbodyTestPlans) return;
     const q = filterTp?.value.trim().toLowerCase() || "";
-    let plans = db.testPlans || [];
+    let runs = db.testRuns || [];
     if (q) {
-      plans = plans.filter(
-        (p) =>
-          String(p.title || "")
+      runs = runs.filter(
+        (r) =>
+          String(r.name || "")
             .toLowerCase()
             .includes(q) ||
-          String(p.rlse || "")
+          String(r.rlse || "")
             .toLowerCase()
             .includes(q) ||
-          String(p.id || "")
+          String(r.taskId || "")
+            .toLowerCase()
+            .includes(q) ||
+          String(r.id || "")
             .toLowerCase()
             .includes(q)
       );
     }
+    runs = [...runs].sort((a, b) => String(b.executedAt || "").localeCompare(String(a.executedAt || "")));
 
-    tbodyTestPlans.innerHTML = plans
+    tbodyTestPlans.innerHTML = runs
       .map(
-        (p) => `<tr>
-      <td><button type="button" class="btn btn-ghost" data-open-tp="${escapeHtml(p.id)}">${escapeHtml(p.id)}</button></td>
-      <td>${escapeHtml(p.taskId)}</td>
-      <td>${escapeHtml(p.title)}</td>
-      <td>${escapeHtml(p.rlse || "")}</td>
-      <td>${escapeHtml(p.status || "")}</td>
-      <td>${escapeHtml(p.environment || "")}</td>
-      <td>${escapeHtml(p.certificationStatus || "")}</td>
-      <td class="cell-actions"><button type="button" class="btn btn-sm" data-delete-tp="${escapeHtml(p.id)}">Eliminar</button></td>
+        (r) => `<tr>
+      <td><button type="button" class="btn btn-ghost" data-open-tr="${escapeHtml(r.id)}">${escapeHtml(r.id)}</button></td>
+      <td>${escapeHtml(r.taskId)}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td>${escapeHtml((r.executedAt || "").slice(0, 10))}</td>
+      <td>${escapeHtml(r.outcome)}</td>
+      <td>${escapeHtml(r.rlse || "")}</td>
+      <td>${escapeHtml(r.environment || "")}</td>
+      <td class="cell-actions"><button type="button" class="btn btn-sm" data-delete-tr="${escapeHtml(r.id)}">Eliminar</button></td>
     </tr>`
       )
-      .join("") || '<tr><td colspan="8">Sin planes de prueba</td></tr>';
-  }
-
-  function openTestPlanModal(planId) {
-    const db = getDb();
-    if (!db) return;
-    const p = (db.testPlans || []).find((x) => x.id === planId);
-    if (!p) return;
-    createMode = false;
-    editingItem = null;
-    modalTitle.textContent = `Plan de pruebas ${p.id}`;
-    modalBody.innerHTML = buildTestPlanForm(p);
-    modalOverlay?.classList.remove("hidden");
-    if (modalSave) modalSave.onclick = () => saveTestPlanModal(p.id);
-  }
-
-  function openTestPlanForTask(taskId) {
-    const db = getDb();
-    if (!db) return;
-    const tp = ensureDraftTestPlan(db, taskId);
-    if (!tp) {
-      toast("No hay plan de pruebas para este ítem.");
-      return;
-    }
-    onDataChange();
-    openTestPlanModal(tp.id);
-  }
-
-  /**
-   * @param {import('./dataService.js').TestPlan} p
-   */
-  function buildTestPlanForm(p) {
-    return `
-      <div class="form-grid">
-        <label>ID</label><input data-tp-field="id" value="${escapeHtml(p.id)}" readonly />
-        <label>Task</label><input data-tp-field="taskId" value="${escapeHtml(p.taskId)}" readonly />
-        <label>Título</label><input data-tp-field="title" value="${escapeHtml(p.title)}" />
-        <label>RLSE</label><input data-tp-field="rlse" value="${escapeHtml(p.rlse)}" />
-        <label>Estado</label><input data-tp-field="status" value="${escapeHtml(p.status)}" />
-        <label>Entorno</label><select data-tp-field="environment">${["PRE", "PRO", "DEV"].map((env) => `<option value="${env}" ${p.environment === env ? "selected" : ""}>${env}</option>`).join("")}</select>
-        <label>Pasos</label><textarea data-tp-field="steps">${escapeHtml(p.steps)}</textarea>
-        <label>Resultado esperado</label><textarea data-tp-field="expectedResult">${escapeHtml(p.expectedResult)}</textarea>
-        <label>Resultado real</label><textarea data-tp-field="actualResult">${escapeHtml(p.actualResult)}</textarea>
-        <label>Evidencias</label><textarea data-tp-field="evidenceNotes">${escapeHtml(p.evidenceNotes)}</textarea>
-        <label>Tester</label><input data-tp-field="tester" value="${escapeHtml(p.tester)}" />
-        <label>Fecha ejecución</label><input data-tp-field="executedAt" type="date" value="${escapeHtml((p.executedAt || "").slice(0, 10))}" />
-        <label>Certificación</label><input data-tp-field="certificationStatus" value="${escapeHtml(p.certificationStatus)}" />
-        <label>Notas</label><textarea data-tp-field="notes">${escapeHtml(p.notes)}</textarea>
-      </div>
-      <p class="hint">Eliminar quita el plan del JSON y limpia la referencia en la tarea.</p>
-      <div class="btn-row">
-        <button type="button" class="btn btn-sm" data-delete-tp="${escapeHtml(p.id)}">Eliminar plan de pruebas</button>
-      </div>`;
-  }
-
-  function saveTestPlanModal(planId) {
-    const db = getDb();
-    if (!db) return;
-    const p = (db.testPlans || []).find((x) => x.id === planId);
-    if (!p) return;
-    modalBody?.querySelectorAll("[data-tp-field]").forEach((el) => {
-      const field = el.getAttribute("data-tp-field");
-      if (!field || field === "id" || field === "taskId") return;
-      /** @type {*} */ (p)[field] = /** @type {HTMLInputElement} */ (el).value;
-    });
-    const task = db.items.find((i) => i.id === p.taskId);
-    if (task && p.rlse) task.rlse = p.rlse;
-    modalOverlay?.classList.add("hidden");
-    if (modalSave) modalSave.onclick = () => saveModal();
-    onDataChange();
-    renderAll();
-    toast("Plan de pruebas guardado.");
+      .join("") || '<tr><td colspan="8">Sin registros de prueba</td></tr>';
   }
 
   function renderPanel() {
@@ -630,7 +798,7 @@ export function mount(api) {
     if (!db || !panelKpis) return;
     const items = db.items;
     const workLike = items.filter((i) => i.level === "TASK" || i.level === "SUBTASK");
-    const tracking = filterTracking(items);
+    const tracking = filterTracking(items).filter((i) => isBoardVisibleLevel(i.level));
     const blocked = items.filter((i) => isBlockedState(i) && !isCompleted(i));
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -705,9 +873,9 @@ export function mount(api) {
       <h2>Last Mile Kanban — proceso</h2>
       <p><strong>Abrir base:</strong> elige un JSON. Con File System Access, <strong>Guardar</strong> sobrescribe el mismo archivo.</p>
       <p><strong>Indicador:</strong> muestra archivo, cambios pendientes y último guardado.</p>
-      <p><strong>Lista general:</strong> todas las tareas; <strong>Pizarra:</strong> TASK y TOPIC con <code>inTracking</code> (activas), incluidas completadas en pizarra.</p>
+      <p><strong>Lista general:</strong> todas las tareas; <strong>Pizarra:</strong> solo <strong>TASK</strong> con <code>inTracking</code> (incluye completadas si siguen en seguimiento).</p>
       <p><strong>Estados:</strong> BACKLOG, PENDIENTE, EN PROGRESO, BLOQUEADA, CERTIFICACIÓN, COMPLETADA (workflow fijo).</p>
-      <p><strong>Plan de pruebas:</strong> se genera borrador al completar; edítalo en la pestaña correspondiente.</p>
+      <p><strong>Pruebas:</strong> varias entradas por tarea completada; pestaña <em>Plan de pruebas</em> o botón <strong>Pruebas</strong> en Completadas.</p>
       <h3>Atajos y uso rápido</h3>
       <ul>
         <li><kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Cmd</kbd>+<kbd>S</kbd>: guardar base de datos.</li>
@@ -728,7 +896,7 @@ export function mount(api) {
     modalTitle.textContent = `Editar ${it.id}`;
     modalBody.innerHTML = buildEditForm(it, db);
     modalOverlay?.classList.remove("hidden");
-    modalSave.onclick = () => saveModal();
+    restoreDefaultModalFooter();
   }
 
   function openCreateDialog() {
@@ -739,7 +907,7 @@ export function mount(api) {
     modalTitle.textContent = "Nueva tarea";
     modalBody.innerHTML = buildCreateForm(db);
     modalOverlay?.classList.remove("hidden");
-    modalSave.onclick = () => saveModal();
+    restoreDefaultModalFooter();
   }
 
   const STATUS_OPTS = [
@@ -883,7 +1051,7 @@ export function mount(api) {
         <label>Responsable</label><input data-field="owner" value="${escapeHtml(it.owner)}" />
         <label>Prioridad</label><input data-field="priority" value="${escapeHtml(it.priority)}" />
         <label>Estado</label><select data-field="status">${opts}</select>
-        <label>En pizarra</label><input type="checkbox" data-field="inTracking" ${it.inTracking ? "checked" : ""} title="Seguimiento operativo" />
+        <label>En pizarra</label><input type="checkbox" data-field="inTracking" ${it.inTracking ? "checked" : ""} ${!isBoardVisibleLevel(it.level) ? "disabled" : ""} title="${isBoardVisibleLevel(it.level) ? "Seguimiento en pizarra (solo TASK)" : "Solo las TASK pueden estar en pizarra"}" />
         <label>Def. OK</label><input type="checkbox" data-field="definitionOk" ${it.definitionOk ? "checked" : ""} />
         <label>Release target</label><input data-field="releaseTarget" value="${escapeHtml(it.releaseTarget)}" />
         <label>RLSE</label><input data-field="rlse" value="${escapeHtml(it.rlse || "")}" />
@@ -896,13 +1064,13 @@ export function mount(api) {
         <label>Dependencias</label><input data-field="dependencies" value="${escapeHtml(it.dependencies)}" />
         <label>Notas internas</label><textarea data-field="notes">${escapeHtml(it.notes)}</textarea>
       </div>`;
-    const tp = findTestPlanByTaskId(db, it.id);
+    const nRuns = countTestRunsForTask(db, it.id);
     const tpExtra =
-      isCompleted(it) && tp
+      isCompleted(it)
         ? `<hr class="form-divider" />
-      <p class="hint">Plan de pruebas vinculado: <strong>${escapeHtml(tp.id)}</strong></p>
+      <p class="hint">Registro de pruebas: <strong>${nRuns}</strong> entrada(s).</p>
       <div class="btn-row">
-        <button type="button" class="btn btn-sm" data-delete-tp="${escapeHtml(tp.id)}">Eliminar plan de pruebas</button>
+        <button type="button" class="btn btn-sm btn-primary" data-open-test-runs="${escapeHtml(it.id)}">Ver / añadir pruebas</button>
       </div>`
         : "";
     const tabs = `
@@ -964,7 +1132,11 @@ export function mount(api) {
       const field = el.getAttribute("data-field");
       if (!field) continue;
       if (el instanceof HTMLInputElement && el.type === "checkbox") {
-        /** @type {*} */ (editingItem)[field] = el.checked;
+        if (field === "inTracking" && el.disabled) {
+          /** @type {*} */ (editingItem)[field] = false;
+        } else {
+          /** @type {*} */ (editingItem)[field] = el.checked;
+        }
       } else if (field === "parentId") {
         const v = /** @type {HTMLSelectElement} */ (el).value;
         editingItem.parentId = v || null;
@@ -997,8 +1169,11 @@ export function mount(api) {
     }
     if (String(editingItem.status) === STATUS_COMPLETED && !editingItem.completedAt) {
       editingItem.completedAt = new Date().toISOString().slice(0, 10);
-      ensureDraftTestPlan(db, editingItem.id);
       editingItem.inTracking = true;
+    }
+    if (editingItem.inTracking && !isBoardVisibleLevel(editingItem.level)) {
+      editingItem.inTracking = false;
+      toast("En pizarra solo aplica a TASK; se ha desmarcado seguimiento para este nivel.");
     }
     if (String(editingItem.status) === STATUS.BLOCKED) {
       editingItem.blocked = true;
@@ -1018,6 +1193,10 @@ export function mount(api) {
     if (!db) return;
     const it = db.items.find((x) => x.id === id);
     if (!it) return;
+    if (!isKanbanActivatableLevel(it.level)) {
+      toast("Solo las tareas (TASK) pueden activarse para la pizarra.");
+      return;
+    }
     if (isCompleted(it)) {
       toast("El ítem ya está completado.");
       return;
@@ -1027,23 +1206,14 @@ export function mount(api) {
       toast(`No se puede enviar: falta ${v.missing.join(", ")}`);
       return;
     }
-    let include = false;
-    if (it.level === "SUBTASK") {
-      include = false;
-    } else {
-      include = window.confirm(
-        "¿Incluir todos los descendientes válidos en seguimiento? (Cancelar = solo este ítem)"
-      );
-    }
+    const include = window.confirm(
+      "¿Incluir también las TASK hijas válidas en seguimiento? (Cancelar = solo esta tarea)"
+    );
     const res = sendToTracking(db.items, id, include);
     if (res.errors.length) {
-      toast(`Actualizados ${res.updated}. Errores: ${res.errors.slice(0, 3).join("; ")}${res.errors.length > 3 ? "…" : ""}`);
+      toast(`Actualizadas ${res.updated} tarea(s). Errores: ${res.errors.slice(0, 3).join("; ")}${res.errors.length > 3 ? "…" : ""}`);
     } else {
-      let msg = `Seguimiento actualizado: ${res.updated} ítem(s).`;
-      if (!isBoardVisibleLevel(it.level)) {
-        msg += " La pizarra solo muestra TASK y TOPIC en seguimiento (no EPIC ni SUBTASK).";
-      }
-      toast(msg);
+      toast(`Pizarra: ${res.updated} tarea(s) en seguimiento.`);
     }
     onDataChange();
     renderAll();
@@ -1054,10 +1224,9 @@ export function mount(api) {
     if (!db || !id) return;
     if (!window.confirm("¿Marcar como completada?")) return;
     completeItem(db.items, id);
-    ensureDraftTestPlan(db, id);
     onDataChange();
     renderAll();
-    toast("Completada; plan de pruebas borrador si aplica.");
+    toast("Completada. Puedes registrar pruebas desde Completadas o el detalle.");
   }
 
   function doUntrack(id) {
@@ -1091,7 +1260,7 @@ export function mount(api) {
     modalOverlay?.classList.add("hidden");
     editingItem = null;
     createMode = false;
-    if (modalSave) modalSave.onclick = () => saveModal();
+    restoreDefaultModalFooter();
   }
 
   modalClose?.addEventListener("click", closeModal);

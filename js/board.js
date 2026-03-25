@@ -144,7 +144,7 @@ export function mountBoard(api) {
       root.innerHTML = `
         <div class="board-empty">
           <p class="board-empty-title">Pizarra vacía</p>
-          <p>No hay TASK ni TOPIC en seguimiento (<strong>Activar</strong> desde <em>Lista general</em>).</p>
+          <p>No hay <strong>TASK</strong> en seguimiento (<strong>Activar</strong> desde <em>Lista general</em>).</p>
           <p class="hint board-empty-hint">Requisitos: responsable, título y definición mínima (resumen ≥8 caracteres, Def. OK o título ≥15 caracteres).</p>
         </div>`;
       return;
@@ -158,11 +158,14 @@ export function mountBoard(api) {
         const cards = list
           .map((it) => cardHtml(it, db, ownerColor(it, db)))
           .join("");
+        const cardsBlock =
+          cards || '<p class="board-col-empty">Sin tareas — suelta aquí abajo también</p>';
         return `
           <div class="board-column" data-drop-status="${escapeHtml(st)}">
             <header class="board-col-head">${escapeHtml(statusLabel(st))} <span class="board-col-count">${list.length}</span></header>
             <div class="board-col-body">
-              ${cards || '<p class="board-col-empty">Sin tareas</p>'}
+              <div class="board-col-cards">${cardsBlock}</div>
+              <div class="board-col-tail" aria-hidden="true"></div>
             </div>
           </div>`;
       }).join("");
@@ -185,11 +188,13 @@ export function mountBoard(api) {
             const cards = list
               .map((it) => cardHtml(it, db, ownerColor(it, db)))
               .join("");
+            const cardsBlock = cards || '<p class="board-col-empty">—</p>';
             return `
               <div class="board-column board-column-mini" data-drop-status="${escapeHtml(st)}" data-drop-owner="${escapeHtml(ownerKey)}">
                 <header class="board-col-head board-col-head-sm">${escapeHtml(statusLabel(st))} <span class="board-col-count">${list.length}</span></header>
                 <div class="board-col-body">
-                  ${cards || '<p class="board-col-empty">—</p>'}
+                  <div class="board-col-cards">${cardsBlock}</div>
+                  <div class="board-col-tail" aria-hidden="true"></div>
                 </div>
               </div>`;
           }).join("");

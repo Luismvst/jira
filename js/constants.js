@@ -100,8 +100,8 @@ export const LEVEL_PREFIX = {
   SUBTASK: "ST",
 };
 
-/** Niveles que aparecen como tarjetas en la pizarra (con `inTracking`) */
-export const BOARD_VISIBLE_LEVELS = new Set(["TASK", "TOPIC"]);
+/** Solo TASK ejecuta flujo Kanban en pizarra (con `inTracking`). */
+export const BOARD_VISIBLE_LEVELS = new Set(["TASK"]);
 
 /**
  * @param {string} [level]
@@ -109,4 +109,13 @@ export const BOARD_VISIBLE_LEVELS = new Set(["TASK", "TOPIC"]);
  */
 export function isBoardVisibleLevel(level) {
   return BOARD_VISIBLE_LEVELS.has(String(level || "").trim());
+}
+
+/**
+ * Único nivel que puede activarse para entrar en la pizarra.
+ * @param {string} [level]
+ * @returns {boolean}
+ */
+export function isKanbanActivatableLevel(level) {
+  return String(level || "").trim() === "TASK";
 }

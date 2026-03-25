@@ -1,6 +1,7 @@
 import {
   DEFAULT_STATUS,
   isBoardVisibleLevel,
+  isKanbanActivatableLevel,
   LEVEL_PREFIX,
   STATUS,
   STATUS_COMPLETED,
@@ -188,6 +189,7 @@ export function sendToTracking(items, itemId, includeDescendants) {
   let updated = 0;
   for (const it of toMark) {
     if (isCompleted(it)) continue;
+    if (!isKanbanActivatableLevel(it.level)) continue;
     const v = validateForTracking(it);
     if (!v.ok) {
       errors.push(`${it.id}: falta ${v.missing.join(", ")}`);

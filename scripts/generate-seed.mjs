@@ -398,8 +398,9 @@ const out = {
   ...base,
   items,
   testPlans: [],
+  testRuns: [],
   ui: {
-    viewMode: "tree",
+    viewMode: "flat",
     treeExpandedIds: [],
     columnVisibility: {},
     sortKey: null,

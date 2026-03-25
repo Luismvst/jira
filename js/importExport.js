@@ -259,6 +259,7 @@ export function replaceProjectData(current, incoming) {
   current.catalogs = incoming.catalogs;
   current.items = incoming.items;
   current.testPlans = incoming.testPlans || [];
+  current.testRuns = incoming.testRuns || [];
   current.ui = incoming.ui || current.ui;
   current.meta = { ...incoming.meta, ...current.meta };
   if (keepLabel) current.meta.lastOpenedFileLabel = keepLabel;
@@ -323,8 +324,9 @@ export function exportTemplateJson() {
       },
     ],
     testPlans: [],
+    testRuns: [],
     ui: {
-      viewMode: "tree",
+      viewMode: "flat",
       treeExpandedIds: [],
       columnVisibility: {},
     },
