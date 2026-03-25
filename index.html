@@ -43,8 +43,8 @@
 
     <nav class="tabs">
       <button type="button" class="tab active" data-tab="panel">Panel</button>
-      <button type="button" class="tab" data-tab="backlog">Backlog</button>
-      <button type="button" class="tab" data-tab="tracking">Seguimiento</button>
+      <button type="button" class="tab" data-tab="backlog">Lista general</button>
+      <button type="button" class="tab" data-tab="board">Pizarra</button>
       <button type="button" class="tab" data-tab="done">Completadas</button>
       <button type="button" class="tab" data-tab="testplans">Plan de pruebas</button>
       <button type="button" class="tab" data-tab="import">Importar / Exportar</button>
@@ -58,9 +58,11 @@
 
       <section id="view-backlog" class="view hidden">
         <div class="view-toolbar">
-          <input type="search" id="filter-text" placeholder="Buscar en fila…" class="input-search" />
+          <input type="search" id="filter-text" placeholder="Buscar (título, notas, id, épica…)" class="input-search" />
           <select id="filter-owner" class="select"></select>
           <select id="filter-epic" class="select"></select>
+          <select id="filter-status-bl" class="select" aria-label="Estado"></select>
+          <select id="filter-priority-bl" class="select" aria-label="Prioridad"></select>
           <button type="button" id="btn-refresh" class="btn btn-ghost">Refrescar vistas</button>
           <button type="button" id="btn-cleanup" class="btn btn-ghost">Limpiar seguimiento &gt;30d</button>
           <button type="button" id="btn-new-item" class="btn btn-primary">Nueva tarea</button>
@@ -70,18 +72,19 @@
             <thead>
               <tr>
                 <th></th>
-                <th>ID</th>
-                <th>Nivel</th>
-                <th>Título</th>
-                <th>Épica</th>
-                <th>Resp.</th>
-                <th>Prior.</th>
-                <th>Estado</th>
-                <th>Seg.</th>
+                <th><button type="button" class="th-sort" data-sort="id">ID</button></th>
+                <th><button type="button" class="th-sort" data-sort="level">Nivel</button></th>
+                <th><button type="button" class="th-sort" data-sort="type">Tipo</button></th>
+                <th><button type="button" class="th-sort" data-sort="title">Título</button></th>
+                <th><button type="button" class="th-sort" data-sort="epic">Épica</button></th>
+                <th><button type="button" class="th-sort" data-sort="owner">Resp.</button></th>
+                <th><button type="button" class="th-sort" data-sort="priority">Prior.</button></th>
+                <th><button type="button" class="th-sort" data-sort="status">Estado</button></th>
+                <th>Activa</th>
                 <th>Def.OK</th>
-                <th>Release</th>
-                <th>RLSE</th>
-                <th>Objetivo</th>
+                <th><button type="button" class="th-sort" data-sort="releaseTarget">Release</button></th>
+                <th><button type="button" class="th-sort" data-sort="rlse">RLSE</button></th>
+                <th><button type="button" class="th-sort" data-sort="targetDate">Objetivo</button></th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -90,37 +93,17 @@
         </div>
       </section>
 
-      <section id="view-tracking" class="view hidden">
-        <div class="view-toolbar">
-          <input type="search" id="filter-text-t" placeholder="Buscar en fila…" class="input-search" />
-          <select id="filter-owner-t" class="select" aria-label="Responsable"></select>
-          <select id="filter-epic-t" class="select" aria-label="Épica"></select>
-          <select id="filter-status-t" class="select" aria-label="Estado"></select>
-          <input type="search" id="filter-rlse-t" placeholder="RLSE…" class="input-search" style="min-width:120px" />
-          <select id="filter-blocked-t" class="select" aria-label="Bloqueo">
-            <option value="">Bloqueo: todos</option>
-            <option value="1">Bloqueadas</option>
-            <option value="0">No bloqueadas</option>
-          </select>
+      <section id="view-board" class="view hidden">
+        <div class="view-toolbar board-toolbar">
+          <input type="search" id="filter-text-b" placeholder="Buscar…" class="input-search" />
+          <select id="filter-owner-b" class="select" aria-label="Responsable"></select>
+          <select id="filter-epic-b" class="select" aria-label="Épica"></select>
+          <span class="board-mode-label">Vista:</span>
+          <label class="board-mode"><input type="radio" name="board-mode" id="board-mode-status" checked /> Por estado</label>
+          <label class="board-mode"><input type="radio" name="board-mode" id="board-mode-assignee" /> Por responsable</label>
+          <p class="hint board-hint">Solo tareas TASK activas (en seguimiento). Arrastra entre columnas o swimlanes. Doble clic abre detalle.</p>
         </div>
-        <div class="table-wrap">
-          <table class="data-table" id="table-tracking">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nivel</th>
-                <th>Título</th>
-                <th>Épica</th>
-                <th>Resp.</th>
-                <th>Prior.</th>
-                <th>Estado</th>
-                <th>Objetivo</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-tracking"></tbody>
-          </table>
-        </div>
+        <div id="board-root" class="board-root"></div>
       </section>
 
       <section id="view-done" class="view hidden">

@@ -1,5 +1,14 @@
 # Changelog — Last Mile Kanban
 
+## 2026-03-25 — Pizarra operativa, workflow v3, actividad y comentarios
+
+- **Workflow v3:** `PENDING`, `CERTIFICATION`, `DONE` sustituyen a `READY`, `IN_REVIEW`, `COMPLETED`; migración automática al abrir JSON antiguos (`ProjectDb` v3).
+- **Pizarra:** vista Kanban por columnas de estado; modo **Por responsable** (swimlanes); drag-and-drop nativo; tarjetas compactas con color por responsable; solo TASK con `inTracking`.
+- **Lista general:** filtros por estado y prioridad; ordenación por columnas; columna tipo y badge de activación.
+- **Detalle:** pestañas Datos / Subtareas / Comentarios / Actividad; comentarios con timestamp; log de actividad por tarea.
+- **Módulos:** `board.js`, `activityLog.js`, `comments.js`.
+- **Fix:** creación de ítems (`readFieldsFromModal`).
+
 ## 2026-03-23 — Cierre (test plans, filtros, búsqueda global)
 
 - **Plan de pruebas:** `deleteTestPlanById`; referencia opcional `testPlanId` en la tarea; botón **Eliminar** en tabla, modal y detalle de tarea completada; confirmación antes de borrar; sin duplicados al crear (sigue `findTestPlanByTaskId`).

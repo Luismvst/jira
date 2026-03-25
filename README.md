@@ -1,6 +1,6 @@
 # Last Mile Kanban
 
-Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tipo Kanban/Jira ligero. **Una sola fuente de datos** en JSON (`items`, catálogos, `testPlans`, preferencias `ui`). Las vistas **Panel**, **Backlog**, **Seguimiento** y **Completadas** son proyecciones del mismo modelo.
+Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tipo Kanban/Jira ligero. **Una sola fuente de datos** en JSON (`items`, catálogos, `testPlans`, preferencias `ui`). Las vistas **Panel**, **Lista general** (todas las tareas), **Pizarra** (solo TASK activas en seguimiento), **Completadas** y **Plan de pruebas** comparten el mismo modelo.
 
 ## Cómo ejecutar
 
@@ -18,8 +18,10 @@ Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tip
 
 ## Estados y modelo
 
-- Estados: `BACKLOG`, `READY`, `IN_PROGRESS`, `IN_REVIEW`, `BLOCKED`, `COMPLETED` (los JSON antiguos en español se migran al cargar).
-- `inTracking`: flag operativo para la vista Seguimiento.
+- Estados (v3): `BACKLOG`, `PENDING`, `IN_PROGRESS`, `BLOCKED`, `CERTIFICATION`, `DONE` (JSON v1/v2 y etiquetas en español se migran al cargar).
+- `inTracking`: tarea en seguimiento operativo; la **Pizarra** muestra solo ítems `level === TASK` con `inTracking` (incluye hechas si siguen en seguimiento).
+- `type`: `task` | `bug` | `feature` por ítem.
+- `activityLog` / `comments`: historial y comentarios por tarea (append-only).
 - `rlse`: identificador de release/certificación (completadas y planes de prueba).
 - **Plan de pruebas:** borrador al completar una tarea; edición en la pestaña **Plan de pruebas**.
 
@@ -43,6 +45,9 @@ Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tip
 │   ├── migrate.js
 │   ├── testPlans.js
 │   ├── ui.js
+│   ├── board.js
+│   ├── activityLog.js
+│   ├── comments.js
 │   └── workItem.js
 ├── scripts/generate-seed.mjs
 ├── CHANGELOG.md

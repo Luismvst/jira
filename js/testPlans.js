@@ -34,7 +34,7 @@ export function findTestPlanByTaskId(db, taskId) {
  */
 export function ensureDraftTestPlan(db, taskId) {
   const it = db.items.find((i) => i.id === taskId);
-  if (!it || String(it.status).trim() !== STATUS.COMPLETED) return null;
+  if (!it || String(it.status).trim() !== STATUS.DONE) return null;
   const existing = findTestPlanByTaskId(db, taskId);
   if (existing) {
     if (!it.testPlanId) it.testPlanId = existing.id;

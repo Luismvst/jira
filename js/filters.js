@@ -13,6 +13,9 @@ export function rowMatchesGlobalSearch(it, q) {
   if (!q || !String(q).trim()) return true;
   const t = String(q).trim().toLowerCase();
   const st = String(it.status || "").trim();
+  const commentHay = Array.isArray(it.comments)
+    ? it.comments.map((c) => String(c.text || "")).join(" ")
+    : "";
   const parts = [
     it.id,
     it.title,
@@ -26,6 +29,7 @@ export function rowMatchesGlobalSearch(it, q) {
     st,
     statusLabel(st),
     it.notes,
+    commentHay,
     it.rlse,
     it.releaseTarget,
     it.preVersion,

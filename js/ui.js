@@ -5,6 +5,7 @@
 import {
   completeItem,
   createWorkItemFromForm,
+  directChildren,
   filterBacklog,
   filterCompleted,
   filterTracking,
@@ -18,7 +19,10 @@ import {
 } from "./workItem.js";
 import { STATUS, STATUS_COMPLETED, STATUS_ORDER, statusLabel } from "./constants.js";
 import { deleteTestPlanById, ensureDraftTestPlan, findTestPlanByTaskId } from "./testPlans.js";
-import { passesTrackingToolbarFilters, rowMatchesGlobalSearch } from "./filters.js";
+import { rowMatchesGlobalSearch } from "./filters.js";
+import { addLogEntry, logFieldChange } from "./activityLog.js";
+import { addComment } from "./comments.js";
+import { mountBoard } from "./board.js";
 
 /**
  * @param {string} s
@@ -95,9 +99,6 @@ export function mount(api) {
   const tbodyBacklog = /** @type {HTMLTableSectionElement} */ (
     document.getElementById("tbody-backlog")
   );
-  const tbodyTracking = /** @type {HTMLTableSectionElement} */ (
-    document.getElementById("tbody-tracking")
-  );
   const tbodyDone = /** @type {HTMLTableSectionElement} */ (document.getElementById("tbody-done"));
   const tbodyTestPlans = /** @type {HTMLTableSectionElement} */ (
     document.getElementById("tbody-testplans")
@@ -106,12 +107,9 @@ export function mount(api) {
   const filterText = /** @type {HTMLInputElement} */ (document.getElementById("filter-text"));
   const filterOwner = /** @type {HTMLSelectElement} */ (document.getElementById("filter-owner"));
   const filterEpic = /** @type {HTMLSelectElement} */ (document.getElementById("filter-epic"));
-  const filterTextT = /** @type {HTMLInputElement} */ (document.getElementById("filter-text-t"));
-  const filterOwnerT = /** @type {HTMLSelectElement} */ (document.getElementById("filter-owner-t"));
-  const filterEpicT = /** @type {HTMLSelectElement} */ (document.getElementById("filter-epic-t"));
-  const filterStatusT = /** @type {HTMLSelectElement} */ (document.getElementById("filter-status-t"));
-  const filterRlseT = /** @type {HTMLInputElement} */ (document.getElementById("filter-rlse-t"));
-  const filterBlockedT = /** @type {HTMLSelectElement} */ (document.getElementById("filter-blocked-t"));
+  const filterStatusBl = /** @type {HTMLSelectElement} */ (document.getElementById("filter-status-bl"));
+  const filterPriorityBl = /** @type {HTMLSelectElement} */ (document.getElementById("filter-priority-bl"));
+  const tableBacklog = document.getElementById("table-backlog");
   const filterTextD = /** @type {HTMLInputElement} */ (document.getElementById("filter-text-d"));
   const filterOwnerD = /** @type {HTMLSelectElement} */ (document.getElementById("filter-owner-d"));
   const filterEpicD = /** @type {HTMLSelectElement} */ (document.getElementById("filter-epic-d"));
@@ -121,6 +119,56 @@ export function mount(api) {
   const modalBody = document.getElementById("modal-body");
   const modalClose = document.getElementById("modal-close");
   const modalSave = document.getElementById("modal-save");
+
+  /** @type {() => void} */
+  let renderBoardView = () => {};
+
+  /**
+   * @param {WorkItem} a
+   * @param {WorkItem} b
+   * @param {string} key
+   * @param {'asc'|'desc'} dir
+   */
+  function compareBacklogSort(a, b, key, dir) {
+    const mult = dir === "desc" ? -1 : 1;
+    const av =
+      key === "type"
+        ? String(a.type || "task")
+        : /** @type {*} */ (a)[key] != null
+          ? String(/** @type {*} */ (a)[key])
+          : "";
+    const bv =
+      key === "type"
+        ? String(b.type || "task")
+        : /** @type {*} */ (b)[key] != null
+          ? String(/** @type {*} */ (b)[key])
+          : "";
+    return mult * av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  /**
+   * @param {WorkItem[]} list
+   * @param {ProjectDb} db
+   */
+  function sortBacklogFlat(list, db) {
+    const key = db.ui?.sortKey || "id";
+    const dir = db.ui?.sortDir === "desc" ? "desc" : "asc";
+    list.sort((a, b) => compareBacklogSort(a, b, key, dir));
+  }
+
+  /**
+   * @param {ProjectDb} db
+   */
+  function updateBacklogSortHeaders(db) {
+    if (!tableBacklog) return;
+    const sk = db.ui?.sortKey || "id";
+    const sd = db.ui?.sortDir === "desc" ? "desc" : "asc";
+    tableBacklog.querySelectorAll(".th-sort").forEach((btn) => {
+      const k = btn.getAttribute("data-sort");
+      btn.classList.toggle("th-sort-active", k === sk);
+      btn.setAttribute("aria-sort", k === sk ? (sd === "asc" ? "ascending" : "descending") : "none");
+    });
+  }
 
   /**
    * @param {ProjectDb} db
@@ -144,6 +192,24 @@ export function mount(api) {
     onDataChange();
   }
 
+  /**
+   * @param {WorkItem} node
+   */
+  function typeLabel(node) {
+    const t = String(node.type || "task").toLowerCase();
+    if (t === "bug") return "Bug";
+    if (t === "feature") return "Feat";
+    return "Task";
+  }
+
+  /**
+   * @param {WorkItem} node
+   */
+  function trackingCell(node) {
+    if (!node.inTracking) return '<span class="badge badge-inactive" title="No en pizarra">—</span>';
+    return '<span class="badge badge-tracking-on" title="En pizarra / seguimiento">●</span>';
+  }
+
   function renderBacklog() {
     const db = getDb();
     if (!db || !tbodyBacklog) return;
@@ -153,50 +219,60 @@ export function mount(api) {
     const q = filterText?.value.trim() || "";
     const ow = filterOwner?.value || "";
     const ep = filterEpic?.value || "";
+    const stf = filterStatusBl?.value || "";
+    const prf = filterPriorityBl?.value || "";
 
     const filtered = backlog.filter((it) => {
       if (ow && it.owner !== ow) return false;
       if (ep && it.epic !== ep) return false;
+      if (stf && String(it.status || "") !== stf) return false;
+      if (prf && String(it.priority || "") !== prf) return false;
       if (!rowMatchesGlobalSearch(it, q)) return false;
       return true;
     });
 
-    const hasFilter = Boolean(q || ow || ep);
+    const hasFilter = Boolean(q || ow || ep || stf || prf);
     const rowsHtml = [];
 
     const rowActions = (nodeId) => `
       <div class="cell-actions">
-        <button type="button" class="btn btn-sm" data-action="track" data-id="${escapeHtml(nodeId)}">Seguimiento</button>
+        <button type="button" class="btn btn-sm" data-action="track" data-id="${escapeHtml(nodeId)}">Activar</button>
         <button type="button" class="btn btn-sm" data-action="done" data-id="${escapeHtml(nodeId)}">Completar</button>
         <button type="button" class="btn btn-sm" data-action="block" data-id="${escapeHtml(nodeId)}">Bloq./Des.</button>
         <button type="button" class="btn btn-sm" data-action="edit" data-id="${escapeHtml(nodeId)}">Editar</button>
       </div>`;
 
-    if (hasFilter) {
-      const flat = [...filtered].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-      for (const node of flat) {
-        rowsHtml.push(`<tr class="${rowClass(node)}" data-id="${escapeHtml(node.id)}">
-        <td></td>
+    const rowCells = (node, pad, toggle) => `<tr class="${rowClass(node)}" data-id="${escapeHtml(node.id)}">
+        <td style="padding-left:${pad}px">${toggle}</td>
         <td><button type="button" class="btn btn-ghost link-open" data-open="${escapeHtml(node.id)}">${escapeHtml(node.id)}</button></td>
         <td>${escapeHtml(node.level)}</td>
+        <td><span class="cell-type cell-type-${escapeHtml(String(node.type || "task"))}">${escapeHtml(typeLabel(node))}</span></td>
         <td>${escapeHtml(node.title)}</td>
         <td>${escapeHtml(node.epic)}</td>
         <td>${escapeHtml(node.owner)}</td>
         <td>${escapeHtml(node.priority)}</td>
         <td>${statusBadge(node)}</td>
-        <td>${node.inTracking ? "Sí" : "No"}</td>
+        <td class="cell-tracking">${trackingCell(node)}</td>
         <td>${node.definitionOk ? "Sí" : "No"}</td>
         <td>${escapeHtml(node.releaseTarget || "")}</td>
         <td>${escapeHtml(node.rlse || "")}</td>
         <td>${escapeHtml(node.targetDate || "")}</td>
         <td>${rowActions(node.id)}</td>
-      </tr>`);
+      </tr>`;
+
+    if (hasFilter) {
+      const flat = [...filtered];
+      sortBacklogFlat(flat, db);
+      for (const node of flat) {
+        rowsHtml.push(rowCells(node, 0, '<span class="tree-toggle"></span>'));
       }
-      tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="13">Sin resultados</td></tr>';
+      tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="15">Sin resultados</td></tr>';
+      updateBacklogSortHeaders(db);
       return;
     }
 
     const roots = sortedChildren(filtered, null);
+    sortBacklogFlat(roots, db);
 
     function walk(node, depth) {
       const kids = sortedChildren(filtered, node.id);
@@ -210,31 +286,50 @@ export function mount(api) {
         toggle = '<span class="tree-toggle"></span>';
       }
 
-      rowsHtml.push(`<tr class="${rowClass(node)}" data-id="${escapeHtml(node.id)}">
-        <td style="padding-left:${pad}px">${toggle}</td>
-        <td><button type="button" class="btn btn-ghost link-open" data-open="${escapeHtml(node.id)}">${escapeHtml(node.id)}</button></td>
-        <td>${escapeHtml(node.level)}</td>
-        <td>${escapeHtml(node.title)}</td>
-        <td>${escapeHtml(node.epic)}</td>
-        <td>${escapeHtml(node.owner)}</td>
-        <td>${escapeHtml(node.priority)}</td>
-        <td>${statusBadge(node)}</td>
-        <td>${node.inTracking ? "Sí" : "No"}</td>
-        <td>${node.definitionOk ? "Sí" : "No"}</td>
-        <td>${escapeHtml(node.releaseTarget || "")}</td>
-        <td>${escapeHtml(node.rlse || "")}</td>
-        <td>${escapeHtml(node.targetDate || "")}</td>
-        <td>${rowActions(node.id)}</td>
-      </tr>`);
+      rowsHtml.push(rowCells(node, pad, toggle));
 
       if (hc && isExp) {
-        for (const ch of kids) walk(ch, depth + 1);
+        const chSorted = [...kids];
+        sortBacklogFlat(chSorted, db);
+        for (const ch of chSorted) walk(ch, depth + 1);
       }
     }
 
     for (const r of roots) walk(r, 0);
 
-    tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="13">Sin datos</td></tr>';
+    tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="15">Sin datos</td></tr>';
+    updateBacklogSortHeaders(db);
+  }
+
+  function addSubtaskQuick(parentId) {
+    const db = getDb();
+    if (!db) return;
+    const parent = db.items.find((i) => i.id === parentId);
+    if (!parent) return;
+    const title = window.prompt("Título de la subtarea");
+    if (!title || !String(title).trim()) return;
+    const item = createWorkItemFromForm(
+      /** @type {*} */ ({
+        level: "SUBTASK",
+        parentId,
+        title: title.trim(),
+        epic: parent.epic,
+        topic: parent.topic || "",
+        task: parent.task || "",
+        owner: parent.owner,
+        priority: parent.priority || "Media",
+        status: STATUS.BACKLOG,
+        summary: "",
+        definitionOk: false,
+        type: parent.type || "task",
+      }),
+      db.items
+    );
+    db.items.push(item);
+    addLogEntry(parent, { action: "subtask_added", detail: item.id });
+    onDataChange();
+    openDetail(parentId);
+    toast(`Subtarea ${item.id} creada.`);
   }
 
   function setupTableDelegation() {
@@ -269,22 +364,21 @@ export function mount(api) {
       }
     });
 
-    tbodyTracking?.addEventListener("click", (e) => {
-      const t = /** @type {HTMLElement} */ (e.target);
-      const openBtn = t.closest("[data-open]");
-      if (openBtn) {
-        openDetail(openBtn.getAttribute("data-open"));
-        return;
+    tableBacklog?.addEventListener("click", (e) => {
+      const btn = /** @type {HTMLElement} */ (e.target).closest(".th-sort");
+      if (!btn) return;
+      const key = btn.getAttribute("data-sort");
+      const db = getDb();
+      if (!db || !key) return;
+      if (!db.ui) db.ui = {};
+      if (db.ui.sortKey === key) {
+        db.ui.sortDir = db.ui.sortDir === "desc" ? "asc" : "desc";
+      } else {
+        db.ui.sortKey = key;
+        db.ui.sortDir = "asc";
       }
-      const actBtn = t.closest("[data-action]");
-      if (!actBtn) return;
-      const id = actBtn.getAttribute("data-id");
-      const action = actBtn.getAttribute("data-action");
-      if (!id) return;
-      if (action === "done") doComplete(id);
-      if (action === "untrack") doUntrack(id);
-      if (action === "block") doToggleBlock(id);
-      if (action === "edit") openDetail(id);
+      onDataChange();
+      renderBacklog();
     });
 
     tbodyDone?.addEventListener("click", (e) => {
@@ -324,6 +418,49 @@ export function mount(api) {
       if (delBtn) {
         const pid = delBtn.getAttribute("data-delete-tp");
         if (pid) doDeleteTestPlan(pid);
+        return;
+      }
+      const openL = t.closest("[data-open]");
+      if (openL && modalBody?.contains(openL)) {
+        const oid = openL.getAttribute("data-open");
+        if (oid) {
+          openDetail(oid);
+          return;
+        }
+      }
+      const tabBtn = t.closest("[data-modal-tab]");
+      if (tabBtn && modalBody) {
+        const name = tabBtn.getAttribute("data-modal-tab");
+        modalBody.querySelectorAll(".modal-tab-panel").forEach((p) => {
+          p.classList.toggle("hidden", p.getAttribute("data-panel") !== name);
+        });
+        modalBody.querySelectorAll(".modal-tab-btn").forEach((b) => {
+          b.classList.toggle("active", b.getAttribute("data-modal-tab") === name);
+        });
+        return;
+      }
+      const addSub = t.closest("[data-add-subtask]");
+      if (addSub) {
+        const pid = addSub.getAttribute("data-add-subtask");
+        if (pid) addSubtaskQuick(pid);
+        return;
+      }
+      const addCom = t.closest("[data-add-comment]");
+      if (addCom) {
+        const id = addCom.getAttribute("data-add-comment");
+        const db = getDb();
+        const textEl = modalBody?.querySelector("[data-comment-text]");
+        const authEl = modalBody?.querySelector("[data-comment-author]");
+        const text = textEl instanceof HTMLTextAreaElement ? textEl.value : "";
+        const author = authEl instanceof HTMLInputElement ? authEl.value : "";
+        const item = id && db ? db.items.find((x) => x.id === id) : null;
+        if (item && addComment(item, { author, text })) {
+          onDataChange();
+          openDetail(id);
+          toast("Comentario añadido.");
+        } else {
+          toast("Comentario vacío o error.");
+        }
       }
     });
   }
@@ -343,48 +480,6 @@ export function mount(api) {
     closeModal();
     renderAll();
     toast("Plan de pruebas eliminado.");
-  }
-
-  function trackingFilterState() {
-    return {
-      owner: filterOwnerT?.value || "",
-      epic: filterEpicT?.value || "",
-      status: filterStatusT?.value || "",
-      rlse: filterRlseT?.value || "",
-      blocked: filterBlockedT?.value || "",
-    };
-  }
-
-  function renderTracking() {
-    const db = getDb();
-    if (!db || !tbodyTracking) return;
-    const list = filterTracking(db.items);
-    const q = filterTextT?.value.trim() || "";
-    const tf = trackingFilterState();
-    const rows = list.filter(
-      (it) => passesTrackingToolbarFilters(it, tf) && rowMatchesGlobalSearch(it, q)
-    );
-
-    tbodyTracking.innerHTML = rows
-      .map(
-        (it) => `<tr class="${rowClass(it)}" data-id="${escapeHtml(it.id)}">
-      <td><button type="button" class="btn btn-ghost link-open" data-open="${escapeHtml(it.id)}">${escapeHtml(it.id)}</button></td>
-      <td>${escapeHtml(it.level)}</td>
-      <td>${escapeHtml(it.title)}</td>
-      <td>${escapeHtml(it.epic)}</td>
-      <td>${escapeHtml(it.owner)}</td>
-      <td>${escapeHtml(it.priority)}</td>
-      <td>${statusBadge(it)}</td>
-      <td>${escapeHtml(it.targetDate || "")}</td>
-      <td class="cell-actions">
-        <button type="button" class="btn btn-sm" data-action="untrack" data-id="${escapeHtml(it.id)}">A backlog</button>
-        <button type="button" class="btn btn-sm" data-action="done" data-id="${escapeHtml(it.id)}">Completar</button>
-        <button type="button" class="btn btn-sm" data-action="block" data-id="${escapeHtml(it.id)}">Bloq./Des.</button>
-        <button type="button" class="btn btn-sm" data-action="edit" data-id="${escapeHtml(it.id)}">Editar</button>
-      </td>
-    </tr>`
-      )
-      .join("") || '<tr><td colspan="9">Nada en seguimiento</td></tr>';
   }
 
   function renderDone() {
@@ -610,8 +705,8 @@ export function mount(api) {
       <h2>Last Mile Kanban — proceso</h2>
       <p><strong>Abrir base:</strong> elige un JSON. Con File System Access, <strong>Guardar</strong> sobrescribe el mismo archivo.</p>
       <p><strong>Indicador:</strong> muestra archivo, cambios pendientes y último guardado.</p>
-      <p><strong>Seguimiento:</strong> flag <code>inTracking</code> + estado; desde Seguimiento puedes volver a backlog.</p>
-      <p><strong>Estados:</strong> BACKLOG, READY, IN_PROGRESS, IN_REVIEW, BLOCKED, COMPLETED.</p>
+      <p><strong>Lista general:</strong> todas las tareas; <strong>Pizarra:</strong> solo TASK con <code>inTracking</code> (activas), incluidas completadas en pizarra.</p>
+      <p><strong>Estados:</strong> BACKLOG, PENDIENTE, EN PROGRESO, BLOQUEADA, CERTIFICACIÓN, COMPLETADA (workflow fijo).</p>
       <p><strong>Plan de pruebas:</strong> se genera borrador al completar; edítalo en la pestaña correspondiente.</p>
     `;
   }
@@ -642,12 +737,88 @@ export function mount(api) {
 
   const STATUS_OPTS = [
     STATUS.BACKLOG,
-    STATUS.READY,
+    STATUS.PENDING,
     STATUS.IN_PROGRESS,
-    STATUS.IN_REVIEW,
     STATUS.BLOCKED,
-    STATUS.COMPLETED,
+    STATUS.CERTIFICATION,
+    STATUS.DONE,
   ];
+
+  /**
+   * @returns {Record<string, *>}
+   */
+  function readFieldsFromModal() {
+    /** @type {Record<string, *>} */
+    const raw = {};
+    modalBody?.querySelectorAll("[data-field]").forEach((el) => {
+      const field = el.getAttribute("data-field");
+      if (!field) return;
+      if (el instanceof HTMLInputElement && el.type === "checkbox") {
+        raw[field] = el.checked;
+      } else if (field === "parentId") {
+        const v = /** @type {HTMLSelectElement} */ (el).value;
+        raw[field] = v || null;
+      } else {
+        raw[field] = /** @type {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} */ (el).value;
+      }
+    });
+    return raw;
+  }
+
+  /**
+   * @param {import('./workItem.js').WorkItem} it
+   * @param {ProjectDb} db
+   */
+  function buildSubtasksPanel(it, db) {
+    const kids = directChildren(db.items, it.id);
+    const rows = kids
+      .map(
+        (k) =>
+          `<li><button type="button" class="btn btn-ghost link-open" data-open="${escapeHtml(k.id)}">${escapeHtml(k.id)}</button> ${escapeHtml(k.title)} · ${statusBadge(k)}</li>`
+      )
+      .join("");
+    return `
+      <p class="hint">Subtareas bajo este ítem.</p>
+      <ul class="subtask-panel-list">${rows || "<li>Sin subtareas</li>"}</ul>
+      <button type="button" class="btn btn-sm" data-add-subtask="${escapeHtml(it.id)}">+ Subtarea rápida</button>`;
+  }
+
+  /**
+   * @param {import('./workItem.js').WorkItem} it
+   */
+  function buildCommentsPanel(it) {
+    const list = (it.comments || [])
+      .map(
+        (c) =>
+          `<li class="comment-row"><time>${escapeHtml(c.createdAt)}</time> <strong>${escapeHtml(c.author)}</strong><p>${escapeHtml(c.text)}</p></li>`
+      )
+      .join("");
+    return `
+      <ul class="comment-panel-list">${list || "<li class='hint'>Sin comentarios</li>"}</ul>
+      <label>Nuevo comentario</label>
+      <textarea data-comment-text rows="3" class="textarea"></textarea>
+      <label>Autor</label>
+      <input data-comment-author value="${escapeHtml(it.owner || "")}" />
+      <button type="button" class="btn btn-primary btn-sm" data-add-comment="${escapeHtml(it.id)}">Publicar comentario</button>`;
+  }
+
+  /**
+   * @param {import('./workItem.js').WorkItem} it
+   */
+  function buildActivityPanel(it) {
+    const log = [...(it.activityLog || [])].reverse();
+    if (!log.length) return '<p class="hint">Sin actividad registrada aún.</p>';
+    return `<ul class="activity-list">${log
+      .map((e) => {
+        const bits = [e.action];
+        if (e.field) bits.push(e.field);
+        if (e.from || e.to) bits.push(`${e.from} → ${e.to}`);
+        if (e.detail) bits.push(e.detail);
+        if (e.user) bits.push(`@${e.user}`);
+        return `<li><time datetime="${escapeHtml(e.ts)}">${escapeHtml(e.ts)}</time> — ${escapeHtml(bits.join(" · "))}</li>`;
+      })
+      .join("")}</ul>`;
+  }
 
   function buildCreateForm(db) {
     const parents = db.items
@@ -663,19 +834,17 @@ export function mount(api) {
       <div class="form-grid">
         <label>Nivel</label><select data-field="level">${["EPIC", "TOPIC", "TASK", "SUBTASK"].map((l) => `<option value="${l}" ${l === "TASK" ? "selected" : ""}>${l}</option>`).join("")}</select>
         <label>Parent</label><select data-field="parentId"><option value="">(ninguno)</option>${parents}</select>
+        <label>Tipo</label><select data-field="type">${["task", "bug", "feature"].map((t) => `<option value="${t}" ${t === "task" ? "selected" : ""}>${t}</option>`).join("")}</select>
         <label>Título</label><input data-field="title" value="" required />
         <label>Resumen</label><textarea data-field="summary"></textarea>
         <label>Épica</label><input data-field="epic" value="" />
-        <label>Topic</label><input data-field="topic" value="" />
-        <label>Task</label><input data-field="task" value="" />
-        <label>Subtarea</label><input data-field="subtask" value="" />
         <label>Responsable</label><input data-field="owner" value="" />
         <label>Prioridad</label><input data-field="priority" value="Media" />
         <label>Estado</label><select data-field="status">${opts}</select>
         <label>Def. OK</label><input type="checkbox" data-field="definitionOk" />
         <label>Release target</label><input data-field="releaseTarget" value="" />
         <label>RLSE</label><input data-field="rlse" value="" />
-        <label>Notas</label><textarea data-field="notes"></textarea>
+        <label>Notas internas</label><textarea data-field="notes"></textarea>
       </div>`;
   }
 
@@ -694,21 +863,20 @@ export function mount(api) {
         (s) =>
           `<option value="${s}" ${curSt === s ? "selected" : ""}>${escapeHtml(statusLabel(s))}</option>`
       ).join("");
-    const base = `
+    const typ = String(it.type || "task");
+    const dataForm = `
       <div class="form-grid">
         <label>ID</label><input type="text" data-field="id" value="${escapeHtml(it.id)}" readonly />
         <label>Parent</label><select data-field="parentId"><option value="">(ninguno)</option>${parents}</select>
         <label>Nivel</label><select data-field="level">${["EPIC", "TOPIC", "TASK", "SUBTASK"].map((l) => `<option value="${l}" ${it.level === l ? "selected" : ""}>${l}</option>`).join("")}</select>
+        <label>Tipo</label><select data-field="type">${["task", "bug", "feature"].map((x) => `<option value="${x}" ${typ === x ? "selected" : ""}>${x}</option>`).join("")}</select>
         <label>Título</label><input data-field="title" value="${escapeHtml(it.title)}" />
-        <label>Resumen</label><textarea data-field="summary">${escapeHtml(it.summary)}</textarea>
+        <label>Resumen</label><textarea data-field="summary">${escapeHtml(it.summary || "")}</textarea>
         <label>Épica</label><input data-field="epic" value="${escapeHtml(it.epic)}" />
-        <label>Topic</label><input data-field="topic" value="${escapeHtml(it.topic)}" />
-        <label>Task</label><input data-field="task" value="${escapeHtml(it.task)}" />
-        <label>Subtarea</label><input data-field="subtask" value="${escapeHtml(it.subtask)}" />
         <label>Responsable</label><input data-field="owner" value="${escapeHtml(it.owner)}" />
         <label>Prioridad</label><input data-field="priority" value="${escapeHtml(it.priority)}" />
         <label>Estado</label><select data-field="status">${opts}</select>
-        <label>Seguimiento</label><input type="checkbox" data-field="inTracking" ${it.inTracking ? "checked" : ""} />
+        <label>En pizarra</label><input type="checkbox" data-field="inTracking" ${it.inTracking ? "checked" : ""} title="Seguimiento operativo" />
         <label>Def. OK</label><input type="checkbox" data-field="definitionOk" ${it.definitionOk ? "checked" : ""} />
         <label>Release target</label><input data-field="releaseTarget" value="${escapeHtml(it.releaseTarget)}" />
         <label>RLSE</label><input data-field="rlse" value="${escapeHtml(it.rlse || "")}" />
@@ -719,7 +887,7 @@ export function mount(api) {
         <label>Fecha fin</label><input data-field="completedAt" value="${escapeHtml(it.completedAt)}" />
         <label>Bloqueada</label><input type="checkbox" data-field="blocked" ${it.blocked ? "checked" : ""} />
         <label>Dependencias</label><input data-field="dependencies" value="${escapeHtml(it.dependencies)}" />
-        <label>Notas</label><textarea data-field="notes">${escapeHtml(it.notes)}</textarea>
+        <label>Notas internas</label><textarea data-field="notes">${escapeHtml(it.notes)}</textarea>
       </div>`;
     const tp = findTestPlanByTaskId(db, it.id);
     const tpExtra =
@@ -730,7 +898,18 @@ export function mount(api) {
         <button type="button" class="btn btn-sm" data-delete-tp="${escapeHtml(tp.id)}">Eliminar plan de pruebas</button>
       </div>`
         : "";
-    return base + tpExtra;
+    const tabs = `
+      <div class="modal-tabs" role="tablist">
+        <button type="button" class="modal-tab-btn active" data-modal-tab="data">Datos</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="subtasks">Subtareas</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="comments">Comentarios</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="activity">Actividad</button>
+      </div>
+      <div class="modal-tab-panel" data-panel="data">${dataForm}${tpExtra}</div>
+      <div class="modal-tab-panel hidden" data-panel="subtasks">${buildSubtasksPanel(it, db)}</div>
+      <div class="modal-tab-panel hidden" data-panel="comments">${buildCommentsPanel(it)}</div>
+      <div class="modal-tab-panel hidden" data-panel="activity">${buildActivityPanel(it)}</div>`;
+    return tabs;
   }
 
   function saveModal() {
@@ -749,6 +928,7 @@ export function mount(api) {
         }),
         db.items
       );
+      addLogEntry(item, { action: "created", detail: item.id });
       db.items.push(item);
       createMode = false;
       modalOverlay?.classList.add("hidden");
@@ -758,6 +938,19 @@ export function mount(api) {
       return;
     }
     if (!editingItem) return;
+    const before = {
+      title: editingItem.title,
+      summary: editingItem.summary,
+      epic: editingItem.epic,
+      owner: editingItem.owner,
+      priority: editingItem.priority,
+      status: editingItem.status,
+      inTracking: editingItem.inTracking,
+      definitionOk: editingItem.definitionOk,
+      rlse: editingItem.rlse,
+      releaseTarget: editingItem.releaseTarget,
+      type: editingItem.type,
+    };
     const form = modalBody?.querySelectorAll("[data-field]");
     if (!form) return;
     for (const el of form) {
@@ -772,12 +965,39 @@ export function mount(api) {
         /** @type {*} */ (editingItem)[field] = el.value;
       }
     }
+    const it = editingItem;
+    logFieldChange(it, "title", String(before.title), String(it.title));
+    logFieldChange(it, "summary", String(before.summary || ""), String(it.summary || ""));
+    logFieldChange(it, "epic", String(before.epic || ""), String(it.epic || ""));
+    logFieldChange(it, "owner", String(before.owner || ""), String(it.owner || ""));
+    logFieldChange(it, "priority", String(before.priority || ""), String(it.priority || ""));
+    if (String(before.status) !== String(it.status)) {
+      addLogEntry(it, {
+        action: "status_changed",
+        field: "status",
+        from: String(before.status),
+        to: String(it.status),
+      });
+    }
+    if (Boolean(before.inTracking) !== Boolean(it.inTracking)) {
+      addLogEntry(it, {
+        action: it.inTracking ? "activated" : "deactivated",
+        detail: "Editado en formulario",
+      });
+    }
+    if (String(before.type || "task") !== String(it.type || "task")) {
+      logFieldChange(it, "type", String(before.type || "task"), String(it.type || "task"));
+    }
     if (String(editingItem.status) === STATUS_COMPLETED && !editingItem.completedAt) {
       editingItem.completedAt = new Date().toISOString().slice(0, 10);
       ensureDraftTestPlan(db, editingItem.id);
+      editingItem.inTracking = true;
     }
     if (String(editingItem.status) === STATUS.BLOCKED) {
       editingItem.blocked = true;
+    }
+    if (String(editingItem.status) !== STATUS.BLOCKED && editingItem.blocked && String(before.status) === STATUS.BLOCKED) {
+      editingItem.blocked = false;
     }
     modalOverlay?.classList.add("hidden");
     editingItem = null;
@@ -869,15 +1089,14 @@ export function mount(api) {
   });
   if (modalSave) modalSave.onclick = () => saveModal();
 
+  const filterOwnerB = /** @type {HTMLSelectElement|null} */ (document.getElementById("filter-owner-b"));
+  const filterEpicB = /** @type {HTMLSelectElement|null} */ (document.getElementById("filter-epic-b"));
+
   filterText?.addEventListener("input", () => renderBacklog());
   filterOwner?.addEventListener("change", () => renderBacklog());
   filterEpic?.addEventListener("change", () => renderBacklog());
-  filterTextT?.addEventListener("input", () => renderTracking());
-  filterOwnerT?.addEventListener("change", () => renderTracking());
-  filterEpicT?.addEventListener("change", () => renderTracking());
-  filterStatusT?.addEventListener("change", () => renderTracking());
-  filterRlseT?.addEventListener("input", () => renderTracking());
-  filterBlockedT?.addEventListener("change", () => renderTracking());
+  filterStatusBl?.addEventListener("change", () => renderBacklog());
+  filterPriorityBl?.addEventListener("change", () => renderBacklog());
   filterTextD?.addEventListener("input", () => renderDone());
   filterOwnerD?.addEventListener("change", () => renderDone());
   filterEpicD?.addEventListener("change", () => renderDone());
@@ -888,19 +1107,28 @@ export function mount(api) {
   function renderAll() {
     fillFilterSelects();
     renderBacklog();
-    renderTracking();
     renderDone();
     renderPanel();
     renderTestPlans();
     renderHelp();
+    renderBoardView();
     refreshToolbar();
   }
+
+  const boardApi = mountBoard({
+    getDb,
+    onDataChange,
+    openDetail,
+    refreshAll: renderAll,
+  });
+  renderBoardView = boardApi.renderBoard;
 
   function fillFilterSelects() {
     const db = getDb();
     if (!db) return;
     const owners = db.catalogs.owners || [];
     const epics = db.catalogs.epics || [];
+    const priorities = db.catalogs.priorities || [];
     if (filterOwner) {
       const cur = filterOwner.value;
       filterOwner.innerHTML =
@@ -915,26 +1143,33 @@ export function mount(api) {
         epics.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
       filterEpic.value = cur;
     }
-    if (filterOwnerT) {
-      const cur = filterOwnerT.value;
-      filterOwnerT.innerHTML =
-        `<option value="">Todos los responsables</option>` +
-        owners.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
-      filterOwnerT.value = cur;
-    }
-    if (filterEpicT) {
-      const cur = filterEpicT.value;
-      filterEpicT.innerHTML =
-        `<option value="">Todas las épicas</option>` +
-        epics.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
-      filterEpicT.value = cur;
-    }
-    if (filterStatusT) {
-      const cur = filterStatusT.value;
-      filterStatusT.innerHTML =
+    if (filterStatusBl) {
+      const cur = filterStatusBl.value;
+      filterStatusBl.innerHTML =
         `<option value="">Todos los estados</option>` +
         STATUS_ORDER.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(statusLabel(s))}</option>`).join("");
-      filterStatusT.value = cur;
+      filterStatusBl.value = cur;
+    }
+    if (filterPriorityBl) {
+      const cur = filterPriorityBl.value;
+      filterPriorityBl.innerHTML =
+        `<option value="">Todas las prioridades</option>` +
+        priorities.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+      filterPriorityBl.value = cur;
+    }
+    if (filterOwnerB) {
+      const cur = filterOwnerB.value;
+      filterOwnerB.innerHTML =
+        `<option value="">Todos</option>` +
+        owners.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
+      filterOwnerB.value = cur;
+    }
+    if (filterEpicB) {
+      const cur = filterEpicB.value;
+      filterEpicB.innerHTML =
+        `<option value="">Todas</option>` +
+        epics.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
+      filterEpicB.value = cur;
     }
   }
 

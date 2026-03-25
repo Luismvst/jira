@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "catalogs": {
     "owners": [
       "Juan Luis",
@@ -10,11 +10,11 @@
     ],
     "statuses": [
       "BACKLOG",
-      "READY",
+      "PENDING",
       "IN_PROGRESS",
-      "IN_REVIEW",
       "BLOCKED",
-      "COMPLETED"
+      "CERTIFICATION",
+      "DONE"
     ],
     "priorities": [
       "Alta",

@@ -4,10 +4,10 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const base = {
-  version: 2,
+  version: 3,
   catalogs: {
     owners: ["Juan Luis", "Guillermo", "Diego", "Luis", "Alejandro"],
-    statuses: ["BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "BLOCKED", "COMPLETED"],
+    statuses: ["BACKLOG", "PENDING", "IN_PROGRESS", "BLOCKED", "CERTIFICATION", "DONE"],
     priorities: ["Alta", "Media", "Baja"],
     levels: ["EPIC", "TOPIC", "TASK", "SUBTASK"],
     epics: [

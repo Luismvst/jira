@@ -6,6 +6,26 @@ import {
   TRACKING_CLEANUP_DAYS,
 } from "./constants.js";
 import { migrateItemStatus } from "./migrate.js";
+import { addLogEntry } from "./activityLog.js";
+
+/**
+ * @typedef {Object} ActivityLogEntry
+ * @property {string} ts ISO
+ * @property {string} action
+ * @property {string} [field]
+ * @property {string} [from]
+ * @property {string} [to]
+ * @property {string} [user]
+ * @property {string} [detail]
+ */
+
+/**
+ * @typedef {Object} TaskComment
+ * @property {string} id
+ * @property {string} author
+ * @property {string} text
+ * @property {string} createdAt ISO
+ */
 
 /**
  * @typedef {Object} WorkItem
@@ -36,7 +56,39 @@ import { migrateItemStatus } from "./migrate.js";
  * @property {string} [dependencies]
  * @property {string} [notes]
  * @property {string} [testPlanId]
+ * @property {string} [type] task | bug | feature
+ * @property {ActivityLogEntry[]} [activityLog]
+ * @property {TaskComment[]} [comments]
  */
+
+/**
+ * Definición mínima razonable: título + (resumen con algo de texto o Def. OK).
+ * @param {WorkItem} item
+ * @returns {boolean}
+ */
+export function hasMinimalDefinition(item) {
+  const titleOk = String(item.title || "").trim().length >= 2;
+  if (!titleOk) return false;
+  if (item.definitionOk) return true;
+  const sum = String(item.summary || "").trim();
+  return sum.length >= 8;
+}
+
+/**
+ * @param {WorkItem} item
+ * @returns {{ ok: boolean, missing: string[] }}
+ */
+export function validateForTracking(item) {
+  const missing = [];
+  if (!String(item.id || "").trim()) missing.push("ID");
+  if (!String(item.level || "").trim()) missing.push("Nivel");
+  if (!String(item.title || "").trim()) missing.push("Título");
+  if (!String(item.owner || "").trim()) missing.push("Responsable");
+  if (!hasMinimalDefinition(item)) missing.push("Definición mínima (título + resumen ≥8 chars o Def. OK)");
+  if (isBlockedState(item)) missing.push("Desbloquear antes de seguimiento");
+  if (isCompleted(item)) missing.push("Ya completada");
+  return { ok: missing.length === 0, missing };
+}
 
 /**
  * @param {WorkItem[]} items
@@ -62,7 +114,7 @@ export function generateId(items, level) {
  */
 export function isCompleted(item) {
   const s = String(item.status || "").trim();
-  return s === STATUS_COMPLETED || s === "Completada";
+  return s === STATUS_COMPLETED || s === "Completada" || s === "COMPLETED";
 }
 
 /**
@@ -71,25 +123,6 @@ export function isCompleted(item) {
  */
 export function isBlockedState(item) {
   return Boolean(item.blocked) || String(item.status || "").trim() === STATUS.BLOCKED;
-}
-
-/**
- * @param {WorkItem} item
- * @returns {{ ok: boolean, missing: string[] }}
- */
-export function validateForTracking(item) {
-  const missing = [];
-  if (!String(item.id || "").trim()) missing.push("ID");
-  if (!String(item.level || "").trim()) missing.push("Nivel");
-  if (!String(item.epic || "").trim()) missing.push("Épica");
-  if (!String(item.title || "").trim()) missing.push("Resumen/título");
-  if (!String(item.owner || "").trim()) missing.push("Responsable");
-  if (!String(item.priority || "").trim()) missing.push("Prioridad");
-  if (!String(item.status || "").trim()) missing.push("Estado");
-  if (!item.definitionOk) missing.push("Definición OK");
-  if (isBlockedState(item)) missing.push("Desbloquear antes de seguimiento");
-  if (isCompleted(item)) missing.push("Ya completada");
-  return { ok: missing.length === 0, missing };
 }
 
 /**
@@ -156,12 +189,27 @@ export function sendToTracking(items, itemId, includeDescendants) {
       continue;
     }
     it.inTracking = true;
-    if (it.status === STATUS.BACKLOG || it.status === STATUS.READY) {
-      it.status = STATUS.IN_PROGRESS;
+    if (it.status === STATUS.BACKLOG) {
+      it.status = STATUS.PENDING;
     }
+    addLogEntry(it, { action: "activated", detail: "En seguimiento / pizarra" });
     updated++;
   }
   return { updated, errors };
+}
+
+/**
+ * Estados de pizarra que al quitar seguimiento vuelven a backlog.
+ * @param {string} st
+ */
+function isBoardWorkflowStatus(st) {
+  const s = String(st || "").trim();
+  return (
+    s === STATUS.PENDING ||
+    s === STATUS.IN_PROGRESS ||
+    s === STATUS.BLOCKED ||
+    s === STATUS.CERTIFICATION
+  );
 }
 
 /**
@@ -173,9 +221,10 @@ export function removeFromTracking(items, itemId) {
   const it = items.find((i) => i.id === itemId);
   if (!it) return false;
   it.inTracking = false;
-  if (it.status === STATUS.IN_PROGRESS || it.status === STATUS.IN_REVIEW) {
+  if (isBoardWorkflowStatus(it.status) && !isCompleted(it)) {
     it.status = STATUS.BACKLOG;
   }
+  addLogEntry(it, { action: "deactivated", detail: "Quitada de pizarra / seguimiento" });
   return true;
 }
 
@@ -190,10 +239,12 @@ export function toggleBlocked(items, itemId) {
   if (isBlockedState(it)) {
     it.blocked = false;
     if (it.status === STATUS.BLOCKED) it.status = STATUS.BACKLOG;
+    addLogEntry(it, { action: "unblocked" });
   } else {
     it.blocked = true;
     it.status = STATUS.BLOCKED;
     it.inTracking = false;
+    addLogEntry(it, { action: "blocked" });
   }
   return true;
 }
@@ -208,8 +259,9 @@ export function completeItem(items, itemId) {
   if (!it) return false;
   it.status = STATUS_COMPLETED;
   it.completedAt = new Date().toISOString().slice(0, 10);
-  it.inTracking = false;
+  it.inTracking = true;
   it.blocked = false;
+  addLogEntry(it, { action: "completed", to: STATUS_COMPLETED });
   return true;
 }
 
@@ -224,6 +276,7 @@ export function reopenItem(items, itemId) {
   it.status = STATUS.BACKLOG;
   it.completedAt = "";
   it.inTracking = false;
+  addLogEntry(it, { action: "reopened", detail: "Reabierta desde Completada" });
   return true;
 }
 
@@ -258,11 +311,21 @@ export function filterBacklog(items) {
 }
 
 /**
+ * Tareas en seguimiento operativo (tabla legacy / KPI): no completadas.
  * @param {WorkItem[]} items
  * @returns {WorkItem[]}
  */
 export function filterTracking(items) {
   return items.filter((i) => i.inTracking && !isCompleted(i));
+}
+
+/**
+ * Ítems para la pizarra: solo TASK con inTracking (incluye DONE en board).
+ * @param {WorkItem[]} items
+ * @returns {WorkItem[]}
+ */
+export function filterBoardTasks(items) {
+  return items.filter((i) => i.level === "TASK" && i.inTracking);
 }
 
 /**
@@ -285,6 +348,7 @@ export function createWorkItemFromForm(raw, existing) {
   let pid = raw.parentId;
   if (pid === "" || pid === undefined || pid === "null") pid = null;
   let st = migrateItemStatus(String(raw.status || DEFAULT_STATUS).trim() || DEFAULT_STATUS);
+  const typ = String(raw.type || "task").trim() || "task";
   return {
     id,
     parentId: pid,
@@ -299,6 +363,7 @@ export function createWorkItemFromForm(raw, existing) {
     owner: String(raw.owner || "").trim(),
     priority: String(raw.priority || "").trim(),
     status: st,
+    type: typ,
     inTracking: false,
     definitionOk: Boolean(raw.definitionOk),
     releaseTarget: String(raw.releaseTarget || "").trim(),
@@ -312,6 +377,8 @@ export function createWorkItemFromForm(raw, existing) {
     blocked: Boolean(raw.blocked) || st === STATUS.BLOCKED,
     dependencies: String(raw.dependencies || "").trim(),
     notes: String(raw.notes || "").trim(),
+    activityLog: [],
+    comments: [],
   };
 }
 

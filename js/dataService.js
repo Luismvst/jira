@@ -124,7 +124,7 @@ export function normalizeDb(data) {
 
 export function emptyDb() {
   return normalizeDb({
-    version: 2,
+    version: 3,
     catalogs: {
       owners: [],
       statuses: [...STATUS_ORDER],

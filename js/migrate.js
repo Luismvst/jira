@@ -1,27 +1,32 @@
 /** @typedef {import('./dataService.js').ProjectDb} ProjectDb */
 import { STATUS, DEFAULT_STATUS, STATUS_ORDER } from "./constants.js";
 
-/** Mapa desde valores legacy (español / mezcla) a STATUS */
+/** Mapa desde valores legacy (español / mezcla / v2) a STATUS v3 */
 const LEGACY_STATUS_MAP = {
   backlog: STATUS.BACKLOG,
   Backlog: STATUS.BACKLOG,
   BACKLOG: STATUS.BACKLOG,
-  lista: STATUS.READY,
-  Lista: STATUS.READY,
-  READY: STATUS.READY,
-  Ready: STATUS.READY,
+  lista: STATUS.PENDING,
+  Lista: STATUS.PENDING,
+  READY: STATUS.PENDING,
+  Ready: STATUS.PENDING,
+  PENDING: STATUS.PENDING,
+  Pendiente: STATUS.PENDING,
   "en progreso": STATUS.IN_PROGRESS,
   "En progreso": STATUS.IN_PROGRESS,
   IN_PROGRESS: STATUS.IN_PROGRESS,
-  "en revisión": STATUS.IN_REVIEW,
-  "En revisión": STATUS.IN_REVIEW,
-  IN_REVIEW: STATUS.IN_REVIEW,
+  "en revisión": STATUS.CERTIFICATION,
+  "En revisión": STATUS.CERTIFICATION,
+  IN_REVIEW: STATUS.CERTIFICATION,
+  CERTIFICATION: STATUS.CERTIFICATION,
+  Certificación: STATUS.CERTIFICATION,
   bloqueada: STATUS.BLOCKED,
   Bloqueada: STATUS.BLOCKED,
   BLOCKED: STATUS.BLOCKED,
-  completada: STATUS.COMPLETED,
-  Completada: STATUS.COMPLETED,
-  COMPLETED: STATUS.COMPLETED,
+  completada: STATUS.DONE,
+  Completada: STATUS.DONE,
+  COMPLETED: STATUS.DONE,
+  DONE: STATUS.DONE,
 };
 
 /**
@@ -39,15 +44,18 @@ export function migrateItemStatus(raw) {
 }
 
 /**
- * @param {WorkItem} it
+ * @param {import('./workItem.js').WorkItem} it
  */
 export function migrateWorkItem(it) {
   it.status = migrateItemStatus(it.status);
   if (it.rlse === undefined) it.rlse = "";
+  if (!Array.isArray(it.activityLog)) it.activityLog = [];
+  if (!Array.isArray(it.comments)) it.comments = [];
+  if (it.type === undefined || it.type === "") it.type = "task";
   if (it.status === STATUS.BLOCKED) {
     it.blocked = true;
   }
-  if (it.blocked && it.status !== STATUS.COMPLETED && it.status !== STATUS.BLOCKED) {
+  if (it.blocked && it.status !== STATUS.DONE && it.status !== STATUS.BLOCKED) {
     it.status = STATUS.BLOCKED;
   }
 }
@@ -56,8 +64,15 @@ export function migrateWorkItem(it) {
  * @param {ProjectDb} d
  */
 export function migrateProjectDb(d) {
+  const fromVersion = typeof d.version === "number" ? d.version : 1;
+
   for (const it of d.items) {
     migrateWorkItem(it);
   }
-  d.version = Math.max(d.version || 1, 2);
+
+  if (fromVersion < 3) {
+    d.version = 3;
+  } else {
+    d.version = Math.max(d.version || 1, 3);
+  }
 }
