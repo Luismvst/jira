@@ -112,6 +112,14 @@ btnSave?.addEventListener("click", async () => {
 });
 
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    const overlay = document.getElementById("modal-overlay");
+    if (overlay && !overlay.classList.contains("hidden")) {
+      e.preventDefault();
+      document.getElementById("modal-close")?.click();
+    }
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.key === "s") {
     e.preventDefault();
     if (dataService.getDb()) {
@@ -338,11 +346,19 @@ btnImportMerge?.addEventListener("click", () => {
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     const name = tab.getAttribute("data-tab");
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach((t) => {
+      t.classList.remove("active");
+      t.setAttribute("aria-selected", "false");
+    });
     tab.classList.add("active");
+    tab.setAttribute("aria-selected", "true");
+    document.body.classList.toggle("view-is-board", name === "board");
     document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
     const target = document.getElementById(`view-${name}`);
     target?.classList.remove("hidden");
+    if (name === "board") {
+      ui.renderBoard();
+    }
   });
 });
 

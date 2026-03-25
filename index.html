@@ -41,17 +41,17 @@
       </div>
     </header>
 
-    <nav class="tabs">
-      <button type="button" class="tab active" data-tab="panel">Panel</button>
-      <button type="button" class="tab" data-tab="backlog">Lista general</button>
-      <button type="button" class="tab" data-tab="board">Pizarra</button>
-      <button type="button" class="tab" data-tab="done">Completadas</button>
-      <button type="button" class="tab" data-tab="testplans">Plan de pruebas</button>
-      <button type="button" class="tab" data-tab="import">Importar / Exportar</button>
-      <button type="button" class="tab" data-tab="help">Ayuda</button>
+    <nav class="tabs" role="tablist" aria-label="Vistas principales">
+      <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="panel">Panel</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="backlog">Lista general</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="board">Pizarra</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="done">Completadas</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="testplans">Plan de pruebas</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="import">Importar / Exportar</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="help">Ayuda</button>
     </nav>
 
-    <main class="main">
+    <main class="main" id="main-content">
       <section id="view-panel" class="view">
         <div id="panel-kpis" class="panel-grid panel-grid-wide"></div>
       </section>
@@ -202,7 +202,7 @@
       </div>
     </div>
 
-    <div id="toast" class="toast hidden"></div>
+    <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <script type="module" src="js/app.js"></script>
   </body>

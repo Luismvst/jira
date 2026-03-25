@@ -708,6 +708,13 @@ export function mount(api) {
       <p><strong>Lista general:</strong> todas las tareas; <strong>Pizarra:</strong> solo TASK con <code>inTracking</code> (activas), incluidas completadas en pizarra.</p>
       <p><strong>Estados:</strong> BACKLOG, PENDIENTE, EN PROGRESO, BLOQUEADA, CERTIFICACIÓN, COMPLETADA (workflow fijo).</p>
       <p><strong>Plan de pruebas:</strong> se genera borrador al completar; edítalo en la pestaña correspondiente.</p>
+      <h3>Atajos y uso rápido</h3>
+      <ul>
+        <li><kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Cmd</kbd>+<kbd>S</kbd>: guardar base de datos.</li>
+        <li><kbd>Esc</kbd>: cerrar el modal de detalle.</li>
+        <li><strong>Pizarra:</strong> arrastra tarjetas entre columnas (estado) o entre swimlanes (responsable en vista “Por responsable”). Doble clic en tarjeta = detalle.</li>
+        <li><strong>Lista general:</strong> clic en cabeceras de columna para ordenar; filtros combinables.</li>
+      </ul>
     `;
   }
 
@@ -1173,5 +1180,12 @@ export function mount(api) {
     }
   }
 
-  return { renderAll, openDetail, openCreateDialog, renderBacklog, renderPanel };
+  return {
+    renderAll,
+    openDetail,
+    openCreateDialog,
+    renderBacklog,
+    renderPanel,
+    renderBoard: () => renderBoardView(),
+  };
 }

@@ -58,6 +58,10 @@ Aplicación web local (**HTML + CSS + JavaScript**) para gestión de backlog tip
 
 Ver [CHANGELOG.md](CHANGELOG.md).
 
+## Pruebas manuales
+
+Checklist detallado en [TESTING.md](TESTING.md).
+
 ## Limitaciones
 
 - `file://` puede no cargar el seed; usar servidor local o **Abrir base de datos**.

@@ -40,8 +40,9 @@ function cardHtml(it, db, color) {
   const n = subtaskCount(db.items, it.id);
   const epic = String(it.epic || "").trim() || "—";
   const owner = String(it.owner || "").trim() || "Sin asignar";
+  const tip = `${it.id} · ${String(it.title || "").replace(/"/g, "'")} · ${epic} · ${owner} · ${n} sub`;
   return `
-    <div class="board-card" draggable="true" data-task-id="${escapeHtml(it.id)}" style="--owner-color:${color}">
+    <div class="board-card" draggable="true" data-task-id="${escapeHtml(it.id)}" title="${escapeHtml(tip)}" style="--owner-color:${color}">
       <div class="board-card-top">
         <span class="board-card-id">${escapeHtml(it.id)}</span>
         <span class="board-card-epic">${escapeHtml(epic)}</span>
@@ -122,12 +123,34 @@ export function mountBoard(api) {
     }
 
     const modeAssigneeOn = modeAssignee?.checked;
+    const totalBoard = filterBoardTasks(db.items).length;
+    const filtersActive = Boolean(f.q || f.owner || f.epic);
 
     if (!tasks.length) {
-      root.innerHTML =
-        '<p class="board-empty">No hay tareas activas en la pizarra. Activa tareas TASK desde la lista general.</p>';
+      if (totalBoard > 0 && filtersActive) {
+        root.innerHTML = `
+          <div class="board-empty board-empty-filters">
+            <p>Ninguna tarea coincide con los filtros.</p>
+            <button type="button" class="btn btn-sm btn-primary" id="board-clear-filters">Quitar filtros</button>
+          </div>`;
+        root.querySelector("#board-clear-filters")?.addEventListener("click", () => {
+          if (filterText) filterText.value = "";
+          if (filterOwner) filterOwner.value = "";
+          if (filterEpic) filterEpic.value = "";
+          renderBoard();
+        });
+        return;
+      }
+      root.innerHTML = `
+        <div class="board-empty">
+          <p class="board-empty-title">Pizarra vacía</p>
+          <p>No hay tareas TASK en seguimiento (<strong>Activar</strong> desde <em>Lista general</em>).</p>
+          <p class="hint board-empty-hint">Requisitos: responsable, título y definición mínima (resumen ≥8 caracteres o Def. OK).</p>
+        </div>`;
       return;
     }
+
+    const summaryHtml = `<div class="board-summary" role="status" aria-live="polite"><strong>${tasks.length}</strong> tarea${tasks.length === 1 ? "" : "s"} en pizarra${filtersActive ? " (filtrado)" : ""}</div>`;
 
     if (!modeAssigneeOn) {
       const cols = BOARD_COLUMNS.map((st) => {
@@ -143,7 +166,7 @@ export function mountBoard(api) {
             </div>
           </div>`;
       }).join("");
-      root.innerHTML = `<div class="board-columns">${cols}</div>`;
+      root.innerHTML = `${summaryHtml}<div class="board-columns">${cols}</div>`;
     } else {
       const ownerKeys = Array.from(new Set(tasks.map((it) => String(it.owner || "").trim()))).sort(
         (a, b) => {
@@ -177,7 +200,7 @@ export function mountBoard(api) {
             </div>`;
         })
         .join("");
-      root.innerHTML = `<div class="board-swimlanes">${laneRows}</div>`;
+      root.innerHTML = `${summaryHtml}<div class="board-swimlanes">${laneRows}</div>`;
     }
 
     wireDnD();
