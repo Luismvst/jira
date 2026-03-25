@@ -39,14 +39,14 @@ Ejecutar con **servidor HTTP local** (`run.bat` o `npx serve .`). No usar `file:
 
 - [ ] **Activar** en ítem **sin responsable**: toast con error claro; no entra en pizarra.
 - [ ] **Activar** sin definición mínima (sin Def. OK y resumen corto): toast con error.
-- [ ] **Activar** en TASK válida: entra en pizarra (estado pasa a Pendiente si estaba en Backlog).
+- [ ] **Activar** en TASK o TOPIC válida: entra en pizarra (estado pasa a Pendiente si estaba en Backlog).
 - [ ] **Activar** con descendientes (confirmación): solo ítems válidos se actualizan; errores listados si hay hijos inválidos.
 
 ---
 
 ## Pizarra
 
-- [ ] **Vacía** (ninguna TASK en seguimiento): mensaje “Pizarra vacía” + requisitos.
+- [ ] **Vacía** (ninguna TASK/TOPIC en seguimiento): mensaje “Pizarra vacía” + requisitos.
 - [ ] Con tareas en pizarra: línea resumen “N tareas en pizarra”.
 - [ ] **Filtros** de pizarra (texto, responsable, épica): reducen tarjetas; si ninguna coincide: mensaje + **Quitar filtros** restaura.
 - [ ] **Por estado**: cinco columnas (Pendiente … Completada); contadores por columna.

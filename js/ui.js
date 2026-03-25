@@ -17,7 +17,7 @@ import {
   toggleBlocked,
   validateForTracking,
 } from "./workItem.js";
-import { STATUS, STATUS_COMPLETED, STATUS_ORDER, statusLabel } from "./constants.js";
+import { STATUS, STATUS_COMPLETED, STATUS_ORDER, isBoardVisibleLevel, statusLabel } from "./constants.js";
 import { deleteTestPlanById, ensureDraftTestPlan, findTestPlanByTaskId } from "./testPlans.js";
 import { rowMatchesGlobalSearch } from "./filters.js";
 import { addLogEntry, logFieldChange } from "./activityLog.js";
@@ -705,7 +705,7 @@ export function mount(api) {
       <h2>Last Mile Kanban — proceso</h2>
       <p><strong>Abrir base:</strong> elige un JSON. Con File System Access, <strong>Guardar</strong> sobrescribe el mismo archivo.</p>
       <p><strong>Indicador:</strong> muestra archivo, cambios pendientes y último guardado.</p>
-      <p><strong>Lista general:</strong> todas las tareas; <strong>Pizarra:</strong> solo TASK con <code>inTracking</code> (activas), incluidas completadas en pizarra.</p>
+      <p><strong>Lista general:</strong> todas las tareas; <strong>Pizarra:</strong> TASK y TOPIC con <code>inTracking</code> (activas), incluidas completadas en pizarra.</p>
       <p><strong>Estados:</strong> BACKLOG, PENDIENTE, EN PROGRESO, BLOQUEADA, CERTIFICACIÓN, COMPLETADA (workflow fijo).</p>
       <p><strong>Plan de pruebas:</strong> se genera borrador al completar; edítalo en la pestaña correspondiente.</p>
       <h3>Atajos y uso rápido</h3>
@@ -1039,7 +1039,11 @@ export function mount(api) {
     if (res.errors.length) {
       toast(`Actualizados ${res.updated}. Errores: ${res.errors.slice(0, 3).join("; ")}${res.errors.length > 3 ? "…" : ""}`);
     } else {
-      toast(`Seguimiento actualizado: ${res.updated} ítem(s).`);
+      let msg = `Seguimiento actualizado: ${res.updated} ítem(s).`;
+      if (!isBoardVisibleLevel(it.level)) {
+        msg += " La pizarra solo muestra TASK y TOPIC en seguimiento (no EPIC ni SUBTASK).";
+      }
+      toast(msg);
     }
     onDataChange();
     renderAll();

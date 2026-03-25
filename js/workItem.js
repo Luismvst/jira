@@ -1,5 +1,6 @@
 import {
   DEFAULT_STATUS,
+  isBoardVisibleLevel,
   LEVEL_PREFIX,
   STATUS,
   STATUS_COMPLETED,
@@ -67,11 +68,14 @@ import { addLogEntry } from "./activityLog.js";
  * @returns {boolean}
  */
 export function hasMinimalDefinition(item) {
-  const titleOk = String(item.title || "").trim().length >= 2;
+  const titleTrim = String(item.title || "").trim();
+  const titleOk = titleTrim.length >= 2;
   if (!titleOk) return false;
   if (item.definitionOk) return true;
   const sum = String(item.summary || "").trim();
-  return sum.length >= 8;
+  if (sum.length >= 8) return true;
+  if (titleTrim.length >= 15) return true;
+  return false;
 }
 
 /**
@@ -84,7 +88,8 @@ export function validateForTracking(item) {
   if (!String(item.level || "").trim()) missing.push("Nivel");
   if (!String(item.title || "").trim()) missing.push("Título");
   if (!String(item.owner || "").trim()) missing.push("Responsable");
-  if (!hasMinimalDefinition(item)) missing.push("Definición mínima (título + resumen ≥8 chars o Def. OK)");
+  if (!hasMinimalDefinition(item))
+    missing.push("Definición mínima (resumen ≥8 caracteres, Def. OK o título ≥15 caracteres)");
   if (isBlockedState(item)) missing.push("Desbloquear antes de seguimiento");
   if (isCompleted(item)) missing.push("Ya completada");
   return { ok: missing.length === 0, missing };
@@ -320,12 +325,12 @@ export function filterTracking(items) {
 }
 
 /**
- * Ítems para la pizarra: solo TASK con inTracking (incluye DONE en board).
+ * Ítems para la pizarra: TASK o TOPIC con inTracking (incluye DONE en board).
  * @param {WorkItem[]} items
  * @returns {WorkItem[]}
  */
 export function filterBoardTasks(items) {
-  return items.filter((i) => i.level === "TASK" && i.inTracking);
+  return items.filter((i) => i.inTracking && isBoardVisibleLevel(i.level));
 }
 
 /**

@@ -99,3 +99,14 @@ export const LEVEL_PREFIX = {
   TASK: "TK",
   SUBTASK: "ST",
 };
+
+/** Niveles que aparecen como tarjetas en la pizarra (con `inTracking`) */
+export const BOARD_VISIBLE_LEVELS = new Set(["TASK", "TOPIC"]);
+
+/**
+ * @param {string} [level]
+ * @returns {boolean}
+ */
+export function isBoardVisibleLevel(level) {
+  return BOARD_VISIBLE_LEVELS.has(String(level || "").trim());
+}

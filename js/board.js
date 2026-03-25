@@ -2,7 +2,7 @@
  * @typedef {import('./dataService.js').ProjectDb} ProjectDb
  * @typedef {import('./workItem.js').WorkItem} WorkItem
  */
-import { BOARD_COLUMNS, STATUS, getOwnerColor, statusLabel } from "./constants.js";
+import { BOARD_COLUMNS, STATUS, getOwnerColor, isBoardVisibleLevel, statusLabel } from "./constants.js";
 import { addLogEntry } from "./activityLog.js";
 import {
   completeItem,
@@ -144,8 +144,8 @@ export function mountBoard(api) {
       root.innerHTML = `
         <div class="board-empty">
           <p class="board-empty-title">Pizarra vacía</p>
-          <p>No hay tareas TASK en seguimiento (<strong>Activar</strong> desde <em>Lista general</em>).</p>
-          <p class="hint board-empty-hint">Requisitos: responsable, título y definición mínima (resumen ≥8 caracteres o Def. OK).</p>
+          <p>No hay TASK ni TOPIC en seguimiento (<strong>Activar</strong> desde <em>Lista general</em>).</p>
+          <p class="hint board-empty-hint">Requisitos: responsable, título y definición mínima (resumen ≥8 caracteres, Def. OK o título ≥15 caracteres).</p>
         </div>`;
       return;
     }
@@ -244,7 +244,7 @@ export function mountBoard(api) {
         const db = getDb();
         if (!db || !dragId) return;
         const it = db.items.find((i) => i.id === dragId);
-        if (!it || it.level !== "TASK") return;
+        if (!it || !isBoardVisibleLevel(it.level)) return;
         const newStatus = col.getAttribute("data-drop-status");
         const newOwnerRaw = col.getAttribute("data-drop-owner");
         let changed = false;
