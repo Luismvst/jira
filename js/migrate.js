@@ -1,5 +1,5 @@
 /** @typedef {import('./dataService.js').ProjectDb} ProjectDb */
-import { STATUS, DEFAULT_STATUS, STATUS_ORDER, isBoardVisibleLevel } from "./constants.js";
+import { STATUS, DEFAULT_STATUS, STATUS_ORDER, isBoardVisibleLevel, DEFAULT_EPIC_COLORS } from "./constants.js";
 import { migrateLegacyTestPlansIntoRuns } from "./testPlans.js";
 
 /** Mapa desde valores legacy (español / mezcla / v2) a STATUS v3 */
@@ -76,9 +76,9 @@ export function migrateProjectDb(d) {
 
   migrateLegacyTestPlansIntoRuns(d);
 
-  if (fromVersion < 3) {
-    d.version = 3;
-  } else {
-    d.version = Math.max(d.version || 1, 3);
+  if (!d.catalogs.epicColors || typeof d.catalogs.epicColors !== "object") {
+    d.catalogs.epicColors = { ...DEFAULT_EPIC_COLORS };
   }
+
+  d.version = Math.max(d.version || 1, 4);
 }

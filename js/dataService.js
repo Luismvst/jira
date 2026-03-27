@@ -42,6 +42,7 @@
  *     priorities: string[],
  *     levels: string[],
  *     epics: string[],
+ *     epicColors?: Record<string, string>,
  *   },
  *   items: WorkItem[],
  *   ui?: UiConfig,

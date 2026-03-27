@@ -2,7 +2,7 @@
  * @typedef {import('./dataService.js').ProjectDb} ProjectDb
  * @typedef {import('./workItem.js').WorkItem} WorkItem
  */
-import { BOARD_COLUMNS, STATUS, getOwnerColor, isBoardVisibleLevel, statusLabel } from "./constants.js";
+import { BOARD_COLUMNS, STATUS, getEpicColor, getOwnerColor, isBoardVisibleLevel, statusLabel } from "./constants.js";
 import { addLogEntry } from "./activityLog.js";
 import {
   completeItem,
@@ -39,13 +39,14 @@ function subtaskCount(items, taskId) {
 function cardHtml(it, db, color) {
   const n = subtaskCount(db.items, it.id);
   const epic = String(it.epic || "").trim() || "—";
+  const epicColor = getEpicColor(it.epic, db.catalogs);
   const owner = String(it.owner || "").trim() || "Sin asignar";
   const tip = `${it.id} · ${String(it.title || "").replace(/"/g, "'")} · ${epic} · ${owner} · ${n} sub`;
   return `
-    <div class="board-card" draggable="true" data-task-id="${escapeHtml(it.id)}" title="${escapeHtml(tip)}" style="--owner-color:${color}">
+    <div class="board-card" draggable="true" data-task-id="${escapeHtml(it.id)}" title="${escapeHtml(tip)}" style="--owner-color:${color};--epic-color:${epicColor}">
       <div class="board-card-top">
         <span class="board-card-id">${escapeHtml(it.id)}</span>
-        <span class="board-card-epic">${escapeHtml(epic)}</span>
+        <span class="board-card-epic"><span class="board-card-epic-dot"></span>${escapeHtml(epic)}</span>
       </div>
       <div class="board-card-title">${escapeHtml(it.title)}</div>
       <div class="board-card-foot">
@@ -144,8 +145,8 @@ export function mountBoard(api) {
       root.innerHTML = `
         <div class="board-empty">
           <p class="board-empty-title">Pizarra vacía</p>
-          <p>No hay <strong>TASK</strong> en seguimiento (<strong>Activar</strong> desde <em>Lista general</em>).</p>
-          <p class="hint board-empty-hint">Requisitos: responsable, título y definición mínima (resumen ≥8 caracteres, Def. OK o título ≥15 caracteres).</p>
+          <p>No hay tareas activadas. Usa <strong>Activar</strong> en <em>Lista general</em> para enviar tareas aquí.</p>
+          <p class="hint board-empty-hint">Requisitos: responsable, título y definición mínima (resumen ≥8 chars, Def. OK o título ≥15 chars).</p>
         </div>`;
       return;
     }

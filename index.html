@@ -61,6 +61,7 @@
           <input type="search" id="filter-text" placeholder="Buscar (título, notas, id, épica…)" class="input-search" />
           <select id="filter-owner" class="select"></select>
           <select id="filter-epic" class="select"></select>
+          <select id="filter-topic" class="select" aria-label="Topic"></select>
           <select id="filter-status-bl" class="select" aria-label="Estado"></select>
           <select id="filter-priority-bl" class="select" aria-label="Prioridad"></select>
           <span class="toolbar-sep" aria-hidden="true"></span>
@@ -78,17 +79,14 @@
                 <th></th>
                 <th><button type="button" class="th-sort" data-sort="id">ID</button></th>
                 <th><button type="button" class="th-sort" data-sort="level">Nivel</button></th>
-                <th><button type="button" class="th-sort" data-sort="type">Tipo</button></th>
-                <th><button type="button" class="th-sort" data-sort="title">Título</button></th>
                 <th><button type="button" class="th-sort" data-sort="epic">Épica</button></th>
+                <th><button type="button" class="th-sort" data-sort="topic">Topic</button></th>
+                <th><button type="button" class="th-sort" data-sort="title">Título</button></th>
                 <th><button type="button" class="th-sort" data-sort="owner">Resp.</button></th>
                 <th><button type="button" class="th-sort" data-sort="priority">Prior.</button></th>
                 <th><button type="button" class="th-sort" data-sort="status">Estado</button></th>
-                <th>Activa</th>
-                <th>Def.OK</th>
-                <th><button type="button" class="th-sort" data-sort="releaseTarget">Release</button></th>
-                <th><button type="button" class="th-sort" data-sort="rlse">RLSE</button></th>
                 <th><button type="button" class="th-sort" data-sort="targetDate">Objetivo</button></th>
+                <th>Activa</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -105,7 +103,7 @@
           <span class="board-mode-label">Vista:</span>
           <label class="board-mode"><input type="radio" name="board-mode" id="board-mode-status" checked /> Por estado</label>
           <label class="board-mode"><input type="radio" name="board-mode" id="board-mode-assignee" /> Por responsable</label>
-          <p class="hint board-hint">Solo <strong>TASK</strong> en seguimiento aparecen aquí. Arrastra entre columnas o swimlanes; la zona inferior de cada columna acepta soltar. Doble clic abre detalle.</p>
+          <p class="hint board-hint">Solo tareas activadas aparecen aquí. Activa tareas desde <em>Lista general</em>. Arrastra entre columnas o swimlanes. Doble clic abre detalle.</p>
         </div>
         <div id="board-root" class="board-root"></div>
       </section>

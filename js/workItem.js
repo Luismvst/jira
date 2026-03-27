@@ -1,5 +1,7 @@
 import {
   DEFAULT_STATUS,
+  canCompleteOrBlock,
+  isClassificationLevel,
   isBoardVisibleLevel,
   isKanbanActivatableLevel,
   LEVEL_PREFIX,
@@ -243,6 +245,7 @@ export function removeFromTracking(items, itemId) {
 export function toggleBlocked(items, itemId) {
   const it = items.find((i) => i.id === itemId);
   if (!it || isCompleted(it)) return false;
+  if (!canCompleteOrBlock(it.level)) return false;
   if (isBlockedState(it)) {
     it.blocked = false;
     if (it.status === STATUS.BLOCKED) it.status = STATUS.BACKLOG;
@@ -264,6 +267,7 @@ export function toggleBlocked(items, itemId) {
 export function completeItem(items, itemId) {
   const it = items.find((i) => i.id === itemId);
   if (!it) return false;
+  if (!canCompleteOrBlock(it.level)) return false;
   it.status = STATUS_COMPLETED;
   it.completedAt = new Date().toISOString().slice(0, 10);
   it.inTracking = true;
@@ -327,7 +331,7 @@ export function filterTracking(items) {
 }
 
 /**
- * Ítems para la pizarra: TASK o TOPIC con inTracking (incluye DONE en board).
+ * Ítems para la pizarra: solo TASK con inTracking (incluye DONE en board).
  * @param {WorkItem[]} items
  * @returns {WorkItem[]}
  */

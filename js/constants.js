@@ -119,3 +119,58 @@ export function isBoardVisibleLevel(level) {
 export function isKanbanActivatableLevel(level) {
   return String(level || "").trim() === "TASK";
 }
+
+/** Etiquetas UI para niveles (español) */
+export const LEVEL_LABEL = {
+  EPIC: "Épica",
+  TOPIC: "Topic",
+  TASK: "Tarea",
+  SUBTASK: "Subtarea",
+};
+
+/** @param {string} [level] @returns {string} */
+export function levelLabel(level) {
+  return LEVEL_LABEL[String(level || "").trim()] || level || "";
+}
+
+/** EPIC / TOPIC — niveles de clasificación/agrupación, no operativos. @param {string} [level] @returns {boolean} */
+export function isClassificationLevel(level) {
+  const l = String(level || "").trim();
+  return l === "EPIC" || l === "TOPIC";
+}
+
+/** @param {string} [level] @returns {boolean} */
+export function isSubtaskLevel(level) {
+  return String(level || "").trim() === "SUBTASK";
+}
+
+/** TASK y SUBTASK pueden completarse/bloquearse; EPIC/TOPIC no. @param {string} [level] @returns {boolean} */
+export function canCompleteOrBlock(level) {
+  const l = String(level || "").trim();
+  return l === "TASK" || l === "SUBTASK";
+}
+
+/** Colores por defecto para épicas @type {Record<string, string>} */
+export const DEFAULT_EPIC_COLORS = {
+  Exportadores: "#0052cc",
+  "Envíos": "#ff8b00",
+  Ajustes: "#6554c0",
+  "Ingestas externas": "#00a3bf",
+  Queries: "#00b8d9",
+  Fixes: "#ff5630",
+  LMCore: "#00875a",
+  Releases: "#ff69b4",
+  Otros: "#8993a4",
+};
+
+/**
+ * @param {string} epicName
+ * @param {{ epicColors?: Record<string, string> }} [catalogs]
+ * @returns {string}
+ */
+export function getEpicColor(epicName, catalogs) {
+  const name = String(epicName || "").trim();
+  if (!name) return "#8993a4";
+  const colors = catalogs?.epicColors || {};
+  return colors[name] || DEFAULT_EPIC_COLORS[name] || "#8993a4";
+}

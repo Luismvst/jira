@@ -985,3 +985,73 @@ body.view-is-board .main {
 .form-grid-tight label {
   font-size: 0.8rem;
 }
+
+/* === Level row differentiation === */
+.row-level-epic > td { background-color: #f0f4ff; }
+.row-level-topic > td { background-color: #f7f5ff; }
+.row-level-subtask > td { font-size: 0.82rem; }
+.row-level-subtask .cell-title { padding-left: 16px; }
+
+.badge-level-epic { background: #deebff; color: #0747a6; font-weight: 600; }
+.badge-level-topic { background: #eae6ff; color: #403294; }
+.badge-level-task { background: #e3fcef; color: #006644; }
+.badge-level-subtask { background: #f4f5f7; color: #5e6c84; font-style: italic; }
+
+/* Epic color chip */
+.epic-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-left: 3px solid var(--epic-color, #8993a4);
+  background: #f4f5f7;
+  white-space: nowrap;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Activate button — primary CTA */
+.btn-activate {
+  background: #0052cc;
+  border-color: #0052cc;
+  color: #fff;
+  font-weight: 600;
+}
+.btn-activate:hover:not(:disabled) {
+  background: #0747a6;
+  border-color: #0747a6;
+}
+.btn-deactivate {
+  border-color: #ff5630;
+  color: #ff5630;
+}
+.btn-deactivate:hover:not(:disabled) {
+  background: #ffebe6;
+}
+
+.cell-notes-dot {
+  margin-left: 4px;
+  font-size: 0.7rem;
+  cursor: help;
+}
+
+/* Board card epic accent */
+.board-card {
+  border-top: 2px solid var(--epic-color, transparent);
+}
+.board-card-epic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--epic-color, #8993a4);
+  flex-shrink: 0;
+  display: inline-block;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+.board-card-epic {
+  display: inline-flex;
+  align-items: center;
+}

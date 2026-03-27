@@ -21,8 +21,13 @@ import {
   STATUS,
   STATUS_COMPLETED,
   STATUS_ORDER,
+  canCompleteOrBlock,
+  getEpicColor,
+  isClassificationLevel,
   isBoardVisibleLevel,
   isKanbanActivatableLevel,
+  isSubtaskLevel,
+  levelLabel,
   statusLabel,
 } from "./constants.js";
 import {
@@ -70,11 +75,11 @@ function hasChildren(it, all) {
  * @param {WorkItem} it
  */
 function rowClass(it) {
-  let c = "";
+  let c = `row-level-${String(it.level || "task").toLowerCase()}`;
   if (it.inTracking) c += " row-tracking";
   if (isCompleted(it)) c += " row-done";
   if (isBlockedState(it)) c += " row-blocked";
-  return c.trim();
+  return c;
 }
 
 /**
@@ -120,6 +125,7 @@ export function mount(api) {
   const filterText = /** @type {HTMLInputElement} */ (document.getElementById("filter-text"));
   const filterOwner = /** @type {HTMLSelectElement} */ (document.getElementById("filter-owner"));
   const filterEpic = /** @type {HTMLSelectElement} */ (document.getElementById("filter-epic"));
+  const filterTopic = /** @type {HTMLSelectElement} */ (document.getElementById("filter-topic"));
   const filterStatusBl = /** @type {HTMLSelectElement} */ (document.getElementById("filter-status-bl"));
   const filterPriorityBl = /** @type {HTMLSelectElement} */ (document.getElementById("filter-priority-bl"));
   const tableBacklog = document.getElementById("table-backlog");
@@ -232,52 +238,60 @@ export function mount(api) {
     const q = filterText?.value.trim() || "";
     const ow = filterOwner?.value || "";
     const ep = filterEpic?.value || "";
+    const tp = filterTopic?.value || "";
     const stf = filterStatusBl?.value || "";
     const prf = filterPriorityBl?.value || "";
 
     const filtered = backlog.filter((it) => {
       if (ow && it.owner !== ow) return false;
       if (ep && it.epic !== ep) return false;
+      if (tp && (it.topic || "") !== tp) return false;
       if (stf && String(it.status || "") !== stf) return false;
       if (prf && String(it.priority || "") !== prf) return false;
       if (!rowMatchesGlobalSearch(it, q)) return false;
       return true;
     });
 
-    const hasFilter = Boolean(q || ow || ep || stf || prf);
+    const hasFilter = Boolean(q || ow || ep || tp || stf || prf);
     const viewFlat = (db.ui?.viewMode || "flat") === "flat" || hasFilter;
     const rowsHtml = [];
 
     const rowActions = (node) => {
-      const trackBtn = isKanbanActivatableLevel(node.level)
-        ? `<button type="button" class="btn btn-sm" data-action="track" data-id="${escapeHtml(node.id)}">Activar</button>`
-        : `<span class="cell-no-action" title="Solo las tareas (TASK) pueden ir a la pizarra">—</span>`;
-      return `
-      <div class="cell-actions">
-        ${trackBtn}
-        <button type="button" class="btn btn-sm" data-action="done" data-id="${escapeHtml(node.id)}">Completar</button>
-        <button type="button" class="btn btn-sm" data-action="block" data-id="${escapeHtml(node.id)}">Bloq./Des.</button>
-        <button type="button" class="btn btn-sm" data-action="edit" data-id="${escapeHtml(node.id)}">Editar</button>
-      </div>`;
+      const parts = [];
+      if (isKanbanActivatableLevel(node.level)) {
+        if (node.inTracking) {
+          parts.push(`<button type="button" class="btn btn-sm btn-deactivate" data-action="untrack" data-id="${escapeHtml(node.id)}" title="Quitar de la pizarra">Desactivar</button>`);
+        } else if (!isCompleted(node)) {
+          parts.push(`<button type="button" class="btn btn-sm btn-activate" data-action="track" data-id="${escapeHtml(node.id)}">Activar</button>`);
+        }
+      }
+      if (canCompleteOrBlock(node.level) && !isCompleted(node)) {
+        parts.push(`<button type="button" class="btn btn-sm" data-action="done" data-id="${escapeHtml(node.id)}" title="Completar">✓</button>`);
+        parts.push(`<button type="button" class="btn btn-sm" data-action="block" data-id="${escapeHtml(node.id)}" title="Bloquear / desbloquear">Bloq.</button>`);
+      }
+      parts.push(`<button type="button" class="btn btn-sm" data-action="edit" data-id="${escapeHtml(node.id)}">Editar</button>`);
+      return `<div class="cell-actions">${parts.join("")}</div>`;
     };
 
-    const rowCells = (node, pad, toggle) => `<tr class="${rowClass(node)}" data-id="${escapeHtml(node.id)}">
+    const rowCells = (node, pad, toggle) => {
+      const epicColor = getEpicColor(node.epic, db.catalogs);
+      const lvl = String(node.level || "").toLowerCase();
+      const notesHint = String(node.notes || "").trim() ? `<span class="cell-notes-dot" title="${escapeHtml(node.notes)}">📝</span>` : "";
+      return `<tr class="${rowClass(node)}" data-id="${escapeHtml(node.id)}">
         <td style="padding-left:${pad}px">${toggle}</td>
         <td><button type="button" class="btn btn-ghost link-open" data-open="${escapeHtml(node.id)}">${escapeHtml(node.id)}</button></td>
-        <td>${escapeHtml(node.level)}</td>
-        <td><span class="cell-type cell-type-${escapeHtml(String(node.type || "task"))}">${escapeHtml(typeLabel(node))}</span></td>
-        <td>${escapeHtml(node.title)}</td>
-        <td>${escapeHtml(node.epic)}</td>
+        <td><span class="badge badge-level-${lvl}">${escapeHtml(levelLabel(node.level))}</span></td>
+        <td><span class="epic-chip" style="--epic-color:${epicColor}">${escapeHtml(node.epic)}</span></td>
+        <td>${escapeHtml(node.topic || "")}</td>
+        <td class="cell-title">${escapeHtml(node.title)}${notesHint}</td>
         <td>${escapeHtml(node.owner)}</td>
         <td>${escapeHtml(node.priority)}</td>
         <td>${statusBadge(node)}</td>
-        <td class="cell-tracking">${trackingCell(node)}</td>
-        <td>${node.definitionOk ? "Sí" : "No"}</td>
-        <td>${escapeHtml(node.releaseTarget || "")}</td>
-        <td>${escapeHtml(node.rlse || "")}</td>
         <td>${escapeHtml(node.targetDate || "")}</td>
+        <td class="cell-tracking">${trackingCell(node)}</td>
         <td>${rowActions(node)}</td>
       </tr>`;
+    };
 
     if (viewFlat) {
       const flat = [...filtered];
@@ -285,7 +299,7 @@ export function mount(api) {
       for (const node of flat) {
         rowsHtml.push(rowCells(node, 0, '<span class="tree-toggle"></span>'));
       }
-      tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="15">Sin resultados</td></tr>';
+      tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="12">Sin resultados</td></tr>';
       updateBacklogSortHeaders(db);
       updateViewModeButtons(db);
       return;
@@ -317,7 +331,7 @@ export function mount(api) {
 
     for (const r of roots) walk(r, 0);
 
-    tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="15">Sin datos</td></tr>';
+    tbodyBacklog.innerHTML = rowsHtml.join("") || '<tr><td colspan="12">Sin datos</td></tr>';
     updateBacklogSortHeaders(db);
     updateViewModeButtons(db);
   }
@@ -408,6 +422,7 @@ export function mount(api) {
         const action = actBtn.getAttribute("data-action");
         if (!id || !action) return;
         if (action === "track") doSendTracking(id);
+        if (action === "untrack") doUntrack(id);
         if (action === "done") doComplete(id);
         if (action === "block") doToggleBlock(id);
         if (action === "edit") openDetail(id);
@@ -846,7 +861,7 @@ export function mount(api) {
 
     panelKpis.innerHTML = `
       <div class="kpi-card kpi-wide"><h2>Resumen operativo</h2>
-        <p class="kpi-muted">Tareas/subtareas: ${workLike.length} · En seguimiento: ${tracking.length} · Bloqueadas: ${blocked.length} · Vencidas: ${overdue.length}</p>
+        <p class="kpi-muted">Tareas: ${workLike.length} · En pizarra: ${tracking.length} · Bloqueadas: ${blocked.length} · Vencidas: ${overdue.length}</p>
       </div>
       <div class="kpi-card"><h3>En seguimiento (${tracking.length})</h3><ul class="kpi-list">${tracking.slice(0, 10).map((i) => `<li><button type="button" class="link-open-panel" data-open="${escapeHtml(i.id)}">${escapeHtml(i.id)} — ${escapeHtml(i.title)}</button></li>`).join("") || "<li>—</li>"}</ul></div>
       <div class="kpi-card"><h3>Próximos vencimientos</h3><ul class="kpi-list">${upcoming.map((x) => `<li><button type="button" class="link-open-panel" data-open="${escapeHtml(x.i.id)}">${escapeHtml(x.i.targetDate)} · ${escapeHtml(x.i.title)}</button></li>`).join("") || "<li>—</li>"}</ul></div>
@@ -873,7 +888,7 @@ export function mount(api) {
       <h2>Last Mile Kanban — proceso</h2>
       <p><strong>Abrir base:</strong> elige un JSON. Con File System Access, <strong>Guardar</strong> sobrescribe el mismo archivo.</p>
       <p><strong>Indicador:</strong> muestra archivo, cambios pendientes y último guardado.</p>
-      <p><strong>Lista general:</strong> todas las tareas; <strong>Pizarra:</strong> solo <strong>TASK</strong> con <code>inTracking</code> (incluye completadas si siguen en seguimiento).</p>
+      <p><strong>Lista general:</strong> backlog completo (épicas, topics, tareas y subtareas); <strong>Pizarra:</strong> solo tareas activadas (nivel TASK con seguimiento activo).</p>
       <p><strong>Estados:</strong> BACKLOG, PENDIENTE, EN PROGRESO, BLOQUEADA, CERTIFICACIÓN, COMPLETADA (workflow fijo).</p>
       <p><strong>Pruebas:</strong> varias entradas por tarea completada; pestaña <em>Plan de pruebas</em> o botón <strong>Pruebas</strong> en Completadas.</p>
       <h3>Atajos y uso rápido</h3>
@@ -1194,26 +1209,27 @@ export function mount(api) {
     const it = db.items.find((x) => x.id === id);
     if (!it) return;
     if (!isKanbanActivatableLevel(it.level)) {
-      toast("Solo las tareas (TASK) pueden activarse para la pizarra.");
+      toast("Solo las tareas pueden activarse para la pizarra.");
       return;
     }
     if (isCompleted(it)) {
-      toast("El ítem ya está completado.");
+      toast("La tarea ya está completada.");
+      return;
+    }
+    if (it.inTracking) {
+      toast("La tarea ya está en la pizarra.");
       return;
     }
     const v = validateForTracking(it);
     if (!v.ok) {
-      toast(`No se puede enviar: falta ${v.missing.join(", ")}`);
+      toast(`No se puede activar: falta ${v.missing.join(", ")}`);
       return;
     }
-    const include = window.confirm(
-      "¿Incluir también las TASK hijas válidas en seguimiento? (Cancelar = solo esta tarea)"
-    );
-    const res = sendToTracking(db.items, id, include);
+    const res = sendToTracking(db.items, id, false);
     if (res.errors.length) {
-      toast(`Actualizadas ${res.updated} tarea(s). Errores: ${res.errors.slice(0, 3).join("; ")}${res.errors.length > 3 ? "…" : ""}`);
+      toast(`Error: ${res.errors.slice(0, 3).join("; ")}`);
     } else {
-      toast(`Pizarra: ${res.updated} tarea(s) en seguimiento.`);
+      toast("Tarea activada en la pizarra.");
     }
     onDataChange();
     renderAll();
@@ -1222,11 +1238,17 @@ export function mount(api) {
   function doComplete(id) {
     const db = getDb();
     if (!db || !id) return;
+    const it = db.items.find((x) => x.id === id);
+    if (!it) return;
+    if (!canCompleteOrBlock(it.level)) {
+      toast("Las épicas y topics no pueden completarse.");
+      return;
+    }
     if (!window.confirm("¿Marcar como completada?")) return;
     completeItem(db.items, id);
     onDataChange();
     renderAll();
-    toast("Completada. Puedes registrar pruebas desde Completadas o el detalle.");
+    toast("Completada.");
   }
 
   function doUntrack(id) {
@@ -1241,6 +1263,12 @@ export function mount(api) {
   function doToggleBlock(id) {
     const db = getDb();
     if (!db || !id) return;
+    const it = db.items.find((x) => x.id === id);
+    if (!it) return;
+    if (!canCompleteOrBlock(it.level)) {
+      toast("Las épicas y topics no pueden bloquearse.");
+      return;
+    }
     toggleBlocked(db.items, id);
     onDataChange();
     renderAll();
@@ -1276,6 +1304,7 @@ export function mount(api) {
   filterOwner?.addEventListener("change", () => renderBacklog());
   filterEpic?.addEventListener("change", () => renderBacklog());
   filterStatusBl?.addEventListener("change", () => renderBacklog());
+  filterTopic?.addEventListener("change", () => renderBacklog());
   filterPriorityBl?.addEventListener("change", () => renderBacklog());
   filterTextD?.addEventListener("input", () => renderDone());
   filterOwnerD?.addEventListener("change", () => renderDone());
@@ -1322,6 +1351,14 @@ export function mount(api) {
         `<option value="">Todas las épicas</option>` +
         epics.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
       filterEpic.value = cur;
+    }
+    if (filterTopic) {
+      const cur = filterTopic.value;
+      const topics = [...new Set(db.items.map((i) => i.topic || "").filter(Boolean))].sort();
+      filterTopic.innerHTML =
+        `<option value="">Todos los topics</option>` +
+        topics.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+      filterTopic.value = cur;
     }
     if (filterStatusBl) {
       const cur = filterStatusBl.value;
